@@ -1,0 +1,18 @@
+__pycache__/
+.vscode/
+old/
+
+settings.json
+
+# ignore (almost) all files in scripts (user-created scripts that utilize knit3D & custom knitout file in `src`)
+scripts/*
+# except the following: (files that import libraries)
+!/scripts/lib.py
+!/scripts/__init__.py
+
+# ignore all user-created graphics, but...
+graphics/*
+# (keep example graphics)
+!/graphics/cactus-shape-example.png
+!/graphics/cactus-stitch-front-example.png
+!/graphics/cactus-stitch-back-example.png
