@@ -774,9 +774,7 @@ def rib(k, startN, endN, length, c, currentBed='f', originBed=None, homeBed=None
 	*sequence is the repeating rib pattern (e.g. 'fb' of 'bf' for 1x1 [first bed indicates which bed left-most needle will be on], 'ffbb' for 2x2, 'fbffbb' for 1x1x2x2, etc.)
 	*gauge is gauge
 	'''
-
 	k.comment(f'begin rib ({sequence})')
-
 	if originBed is None: originBed = currentBed
 
 	if gauge > 1:
@@ -872,28 +870,30 @@ def rib(k, startN, endN, length, c, currentBed='f', originBed=None, homeBed=None
 
 def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], side='l', patterns=[], defaultLength=None, wasteDivider=False):
 	'''
-	*k is knitout Writer
-	*leftN is the left-most needle to knit on
-	*rightN is the right-most needle to knit on
-	*c is the carrier to knit with
-	*wasteC is the carrier to use for the waste section; if None, won't add any waste sections
-	*drawC is the carrier to use for the draw thread
-	*featureCs is a list of any carriers that might be used for special features (for now, the only use case would be if plaiting were to occur)
-	*side is the side the start on (valid values are 'l' [left] and 'r' [right])
-	*patterns is a list of patterns to make tubes for; can be a string specifying which stitch pattern to use (should match the function name for that specific pattern [which should, in turn, simply be the pattern name]); note that 'jersey' is fine for circular (either will work)
-		- can also be a sub-list with pattern name as the first element and a dict with args specific to the pattern's function/additional info as value
-			- do this^ if want to knit a bunch of tubes with different stitch patterns; in this case, a waste section will be inserted in between them
-			- in the case of a dict, this would pass additional specifications for the given pattern, specific to that pattern and the parameters in its function. The key should be the parameter name (as a string) and the value should be the value you're passing for it. These are the parameters that you might include for certain patterns:
-				- garter: 'patternRows'
-				- lace: 'patternRows'
-				- rib: 'sequence'
-				- **for ANY pattern, can also include the following information:
-					- 'length' which is the number of passes on either bed (will override the defaultLength)
-					- 'plaiting' which indicates plaiting will be used for the stitch pattern (in which case, the additional plaiting carrier should be included in featureCs, and front/back bed will knit in intervals of 3 passes each, with plaiting occurring for first two passes and normal for last [so that plaiting carrier can consistently live on the same side, since knitting circularly])
-	*defaultLength is the number of passes on either bed that will automatically be used if no 'length' is specified in a pattern's dict
-	*wasteDivider is a boolean that indicates whether or not the stitch pattern tubes should be separated by waste sections with a draw thread in the middle
+	Knits a half-gauge tube in the stitch pattern[s] indicated in the `patterns` arg.
 	
-	knits a half gauge tube in the stitch pattern
+	Parameters:
+	----------
+	 * k (import): the knitout Writer.
+	 * leftN (int): the left-most needle to knit on.
+	 * rightN (int): the right-most needle to knit on.
+	 * c (str): the carrier to knit with.
+	 * wasteC (str, optional): the carrier to use for the waste section. If None, won't add any waste sections. Defaults to '1'.
+	 * drawC (str, optional): the carrier to use for the draw thread. Defaults to '2'.
+	 * featureCs (list, optional): a list of any carriers that might be used for special features (for now, the only use case would be if plaiting were to occur). Defaults to [].
+	 * side (str, optional): the side the start on (valid values are 'l' [left] and 'r' [right]). Defaults to 'l'.
+	 * patterns (list, optional): a list of patterns to make tubes for; can be a string specifying which stitch pattern to use (should match the function name for that specific pattern [which should, in turn, simply be the pattern name]); note that 'jersey' is fine for circular (either will work). Defaults to [].
+		 * can also be a sub-list with pattern name as the first element and a dict with args specific to the pattern's function/additional info as value
+			 * do this^ if want to knit a bunch of tubes with different stitch patterns; in this case, a waste section will be inserted in between them
+			 * in the case of a dict, this would pass additional specifications for the given pattern, specific to that pattern and the parameters in its function. The key should be the parameter name (as a string) and the value should be the value you're passing for it. These are the parameters that you might include for certain patterns:
+				 * garter: 'patternRows'
+				 * lace: 'patternRows'
+				 * rib: 'sequence'
+				 * **for ANY pattern, can also include the following information:
+					 * 'length' which is the number of passes on either bed (will override the defaultLength)
+					 * 'plaiting' which indicates plaiting will be used for the stitch pattern (in which case, the additional plaiting carrier should be included in featureCs, and front/back bed will knit in intervals of 3 passes each, with plaiting occurring for first two passes and normal for last [so that plaiting carrier can consistently live on the same side, since knitting circularly])
+			 * defaultLength (int, optional): the number of passes on either bed that will automatically be used if no 'length' is specified in a pattern's dict. Defaults to None.
+			 * wasteDivider (bool, optional): indicates whether or not the stitch pattern tubes should be separated by waste sections with a draw thread in the middle. Defaults to False.  
 	'''
 	if wasteC is None: wasteDivider = False #just in case the user made a mistake
 
@@ -954,7 +954,7 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 				if wasteC in endOnRight: k.miss('+', f'f{rightN+3}', wasteC)
 				else: k.miss('-', f'f{leftN-3}', wasteC)
 		elif idx == 0 and wasteC is not None:
-			wasteSection(k, leftN=leftN, rightN=rightN, wasteC=wasteC, drawC=drawC, otherCs=otherCs, gauge=2, endOnRight=endOnRight, initial=True, drawMiddle=wasteDivider)
+			wasteSection(k, leftN=leftN, rightN=rightN, closedCaston=False, wasteC=wasteC, drawC=drawC, otherCs=otherCs, gauge=2, endOnRight=endOnRight, initial=True, drawMiddle=wasteDivider) #open caston to start (for now)
 
 			if c != drawC and missDrawC:
 				if drawC in endOnRight: k.miss('+', f'f{rightN+3}', drawC)
@@ -962,6 +962,10 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 			if c != wasteC and missWasteC: 
 				if wasteC in endOnRight: k.miss('+', f'f{rightN+3}', wasteC)
 				else: k.miss('-', f'f{leftN-3}', wasteC)
+			
+			if c in endOnRight: castonStartN, castonEndN = rightN, leftN
+			else: castonStartN, castonEndN = leftN, rightN
+			openTubeCaston(k, startN=castonStartN, endN=castonEndN, c=c, gauge=2) #add open tube caston
 
 		if 'stitchNumber' in info: k.stitchNumber(info['stitchNumber'])
 
@@ -1130,6 +1134,7 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 				stitchPatFunc(k, length=(0.5 if pattern == 'interlock' else 1), c=c, **currArgs)
 			
 			if 'stitchNumber' in info: k.stitchNumber(stitchNumber) #reset
+	print('\ndone.')
 
 
 def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeedles=[], offLimits=[], firstTime=False, lastTime=False, justTuck=False, tuckNs=[], missN=None, tuckOver=[[], []]): #TODO: move this somewhere else in file (to a section where it fits better)
