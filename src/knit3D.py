@@ -880,20 +880,22 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 	 * c (str): the carrier to knit with.
 	 * wasteC (str, optional): the carrier to use for the waste section. If None, won't add any waste sections. Defaults to '1'.
 	 * drawC (str, optional): the carrier to use for the draw thread. Defaults to '2'.
-	 * featureCs (list, optional): a list of any carriers that might be used for special features (for now, the only use case would be if plaiting were to occur). Defaults to [].
+	 * featureCs (list, optional): any carriers that might be used for special features (for now, the only use case would be if plaiting were to occur). Defaults to [].
 	 * side (str, optional): the side the start on (valid values are 'l' [left] and 'r' [right]). Defaults to 'l'.
-	 * patterns (list, optional): a list of patterns to make tubes for; can be a string specifying which stitch pattern to use (should match the function name for that specific pattern [which should, in turn, simply be the pattern name]); note that 'jersey' is fine for circular (either will work). Defaults to [].
-		 * can also be a sub-list with pattern name as the first element and a dict with args specific to the pattern's function/additional info as value
-			 * do this^ if want to knit a bunch of tubes with different stitch patterns; in this case, a waste section will be inserted in between them
-			 * in the case of a dict, this would pass additional specifications for the given pattern, specific to that pattern and the parameters in its function. The key should be the parameter name (as a string) and the value should be the value you're passing for it. These are the parameters that you might include for certain patterns:
+	 * patterns (list): indicates which stitch patterns to make tubes for; a list containing sub-list(s) containing 1-2 items.
+		 * e.g.: `[['rib', {'sequence': 'fb'}], ['jersey'], ['garter', {'patternRows': 2}]]`
+		 * sublist[0] is a string specifying which stitch pattern to use (should match the function name for that specific pattern [which should, in turn, simply be the pattern name])
+			 * note that 'jersey' is fine for circular (either will work).
+		 * sublist[1] (optional) is a dict with args specific to the given pattern's function.
+			 * The key should be the parameter name (as a string) and the value should be the specification you're passing for it. These are the parameters that you might include for certain patterns:
 				 * garter: 'patternRows'
 				 * lace: 'patternRows'
 				 * rib: 'sequence'
 				 * **for ANY pattern, can also include the following information:
 					 * 'length' which is the number of passes on either bed (will override the defaultLength)
 					 * 'plaiting' which indicates plaiting will be used for the stitch pattern (in which case, the additional plaiting carrier should be included in featureCs, and front/back bed will knit in intervals of 3 passes each, with plaiting occurring for first two passes and normal for last [so that plaiting carrier can consistently live on the same side, since knitting circularly])
-			 * defaultLength (int, optional): the number of passes on either bed that will automatically be used if no 'length' is specified in a pattern's dict. Defaults to None.
-			 * wasteDivider (bool, optional): indicates whether or not the stitch pattern tubes should be separated by waste sections with a draw thread in the middle. Defaults to False.  
+	 * defaultLength (int, optional): the number of passes on either bed that will automatically be used if no 'length' is specified in a pattern's dict. Defaults to None.
+	 * wasteDivider (bool, optional): indicates whether or not the stitch pattern tubes should be separated by waste sections with a draw thread in the middle. Defaults to False.  
 	'''
 	if wasteC is None: wasteDivider = False #just in case the user made a mistake
 
