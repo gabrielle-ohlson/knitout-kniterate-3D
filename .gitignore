@@ -10,6 +10,8 @@ scripts/*
 !/scripts/lib.py
 !/scripts/__init__.py
 
+!/scripts/stitch-tube.py
+
 # ignore all user-created graphics, but...
 graphics/*
 # (keep example graphics)
