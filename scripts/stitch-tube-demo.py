@@ -19,7 +19,7 @@ side = 'l'
 # --- STITCH PATTERN TUBE FUNCTIONS ---
 
 
-gabrielle.stitchPatternTube(k, leftN=leftN, rightN=rightN, c=mainC, wasteC=wasteC, drawC=drawC, featureCs=[wasteC, drawC], side='l', patterns=[
+knit3D.stitchPatternTube(k, leftN=leftN, rightN=rightN, c=mainC, wasteC=wasteC, drawC=drawC, featureCs=[wasteC, drawC], side='l', patterns=[
 	['jersey', {'plaiting': True}],
 	['jersey', {'stitchNumber': 6}],
 	['jersey', {'stitchNumber': 5}],
@@ -30,6 +30,6 @@ gabrielle.stitchPatternTube(k, leftN=leftN, rightN=rightN, c=mainC, wasteC=waste
 	['jersey', {'stitchNumber': 2}],
 ], defaultLength=rows, wasteDivider=True)
 
-gabrielle.dropFinish(k, frontNeedleRanges=[leftN, rightN], backNeedleRanges=[leftN, rightN], carriers=[mainC, drawC, wasteC], direction='+', borderC=wasteC)
+knit3D.dropFinish(k, frontNeedleRanges=[leftN, rightN], backNeedleRanges=[leftN, rightN], carriers=[mainC, drawC, wasteC], direction='+', borderC=wasteC)
 
 k.write(f'{fileName}.k')

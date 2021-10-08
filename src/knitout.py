@@ -488,6 +488,7 @@ class Writer:
         self.operations = list()
 
     def write(self, filename):
+        print(f'Writing {filename} ...')
         version = ';!knitout-2\n'
         content = version + '\n'.join(self.headers) + '\n' +  '\n'.join(self.operations)
         try:
@@ -504,6 +505,7 @@ class Writer:
             out.close()
         except IOError as error:
             print('Could not write to file ' + filename)
+        
 
 def example():
     stockinette_rectangle()

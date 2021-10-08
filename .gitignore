@@ -9,12 +9,18 @@ scripts/*
 # except the following: (files that import libraries)
 !/scripts/lib.py
 !/scripts/__init__.py
-
-!/scripts/stitch-tube.py
+# and any demo/example/debug files:
+!/scripts/*-demo.py
+!/scripts/*-example.py
+!/scripts/*-debug.py
+# !/scripts/stitch-tube.py
 
 # ignore all user-created graphics, but...
 graphics/*
-# (keep example graphics)
-!/graphics/cactus-shape-example.png
-!/graphics/cactus-stitch-front-example.png
-!/graphics/cactus-stitch-back-example.png
+# (keep demo/example/debug graphics)
+!/graphics/*-demo.png
+!/graphics/*-example.png
+!/graphics/*-debug.png
+# !/graphics/cactus-shape-example.png
+# !/graphics/cactus-stitch-front-example.png
+# !/graphics/cactus-stitch-back-example.png
