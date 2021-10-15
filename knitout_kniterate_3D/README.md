@@ -23,7 +23,7 @@ TODO
 
 # Workflow
 ## Installation
-From the command line, install the [package](https://pypi.org/project/knitout-kniterate-3D/1.0.0/) with pip:
+From the command line, run:
 ```
 pip install knitout-kniterate-3D
 ```

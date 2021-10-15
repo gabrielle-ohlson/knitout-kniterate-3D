@@ -1,4 +1,5 @@
-from lib import knitout, knit3D
+# from lib import knitout, knit3D
+from knitout_kniterate_3D import knit3D, knitout
 
 k = knitout.Writer('1 2 3 4 5 6')
 
