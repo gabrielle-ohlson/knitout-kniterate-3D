@@ -22,10 +22,10 @@ side = 'l'
 
 knit3D.stitchPatternTube(k, leftN=leftN, rightN=rightN, c=mainC, wasteC=wasteC, drawC=drawC, featureCs=[wasteC, drawC], side='l', patterns=[
 	['jersey', { 'plaiting': True }],
-	['jersey', { 'extensions': {'stitchNumber': 6, 'rollerAdvance': 600} }],
+	# ['jersey', { 'extensions': {'stitchNumber': 6, 'rollerAdvance': 600} }],
 	['jersey', { 'extensions': {'stitchNumber': 5} }],
 	['garter', {'patternRows': 3}],
-	['rib', {'sequence': 'fb'}],
+	['rib', {'sequence': 'fb', 'extensions': {'stitchNumber': 8, 'rollerAdvance': 600} }, ],
 	'interlock',
 	['jersey', { 'extensions': {'stitchNumber': 3} }],
 	['jersey', { 'extensions': {'stitchNumber': 2} }],

@@ -2,6 +2,10 @@ import numpy as np
 import math
 import warnings
 
+from distutils import util
+
+from copy import deepcopy
+
 from PIL import Image, ImageColor
 
 #NOTE: for gauge > 1: decided baseBed should consistently be front so as to make things less complicated (because doesn't really matter) --- so translation would be fn -> f(gauge*n) bn -> b((gauge*n)+1)
@@ -34,6 +38,37 @@ wasteWeightsRowCount = 20
 #----------------------
 #--- MISC FUNCTIONS ---
 #----------------------
+def query_yes_no(question, default=None):
+	if default is None:
+		prompt = " [y/n] "
+	elif default == 'yes':
+		prompt = " [Y/n] "
+	elif default == 'no':
+		prompt = " [y/N] "
+	else:
+		raise ValueError(f"Unknown setting '{default}' for default.")
+
+	while True:
+		try:
+			resp = input(question + prompt).strip().lower()
+			if default is not None and resp == '':
+				return default == 'yes'
+			else:
+				return util.strtobool(resp)
+		except ValueError:
+			print("Please respond with 'yes' or 'no' (or 'y' or 'n').\n")
+
+
+def colorDistance(rgb1, rgb2, returnRGBs=False):
+	np_rgb1 = np.array(list(rgb1))
+	np_rgb2 = np.array(list(rgb2))
+
+	rm = 0.5*(np_rgb1[0]+np_rgb2[0])
+	d = abs(sum((2+rm, 4, 3-rm) * (np_rgb1-np_rgb2)**2))**0.5
+	if returnRGBs: return d, rgb1, rgb2
+	else: return d
+
+
 def setSettings(speed=None, stitch=None, roller=None, xferSpeed=None, xferStitch=None, xferRoller=None, splitSpeed=None, splitStitch=None, splitRoller=None, wasteSpeed=None):
 	'''
 	*TODO
@@ -51,6 +86,26 @@ def setSettings(speed=None, stitch=None, roller=None, xferSpeed=None, xferStitch
 	if splitRoller is not None: globals()['splitRollerAdvance'] = splitRoller
 
 	if wasteSpeed is not None: globals()['wasteSpeedNumber'] = wasteSpeed
+
+
+def defaultSettings():
+	#for main section 
+	globals()['speedNumber'] = 300
+	globals()['stitchNumber'] = 4
+	globals()['rollerAdvance'] = 300
+
+	#for xfers
+	globals()['xferSpeedNumber'] = 300
+	globals()['xferStitchNumber'] = math.ceil(stitchNumber//2)
+	globals()['xferRollerAdvance'] = 0
+
+	#for splits
+	globals()['splitSpeedNumber'] = 100
+	globals()['splitStitchNumber'] = 4
+	globals()['splitRollerAdvance'] = 0
+
+	#for waste section
+	globals()['wasteSpeedNumber'] = 400
 
 
 def xferSettings(k, alterations={}):
@@ -175,7 +230,6 @@ def placeCarrier(k, leftN=None, rightN=None, carrierOpts=[], gauge=2, opDetails=
 					c = carr
 					break
 
-		# if ln['op'] == 'in' or ln['op'] == 'out': needleNum = 0 #new #just assume 0 is the min needle (#TODO: have option for detecting min needle)
 		if ln['op'] == 'in' or ln['op'] == 'out' or ln['op'] is None: needleNum = 0 #new #just assume 0 is the min needle (#TODO: have option for detecting min needle) #if None, means carrier hasn't been used yet
 		else: needleNum = ln['bn1']['needle']
 		
@@ -187,13 +241,14 @@ def placeCarrier(k, leftN=None, rightN=None, carrierOpts=[], gauge=2, opDetails=
 	if len(distances):
 		minDist = min(distances.keys())
 		placedCarrier = distances[minDist]['carrier']
+		needleNum = needleNums[placedCarrier]
 
 		if (needleNum-(distances[minDist]['sideN'])) > 0: tuckDir = '-'
 		else: tuckDir = '+'
 
 		if minDist > 5: #need to tuck to get it in correct spot
 			tuckB = 0 #for tucking every other
-			tuckF = 0 
+			tuckF = 0
 
 			k.comment(f'tuck to move carrier {placedCarrier} from {needleNum} to {distances[minDist]["sideN"]}')
 
@@ -822,7 +877,6 @@ def rib(k, startN, endN, length, c, currentBed='f', originBed=None, homeBed=None
 		otherStartN = startN-1
 		ranges = {dir1: range(startN, endN-1, -1), dir2: range(endN, startN+1)}
 
-
 	secureNeedles = {}
 	if originBed == 'f': otherBed = 'b'
 	else: otherBed = 'f'
@@ -998,10 +1052,16 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 		# else: #just a draw thread #new #TODO: add back as option?
 			# drawThread(k, leftN, rightN, drawC, side=drawSide, circular=True, missDraw=((rightN+3) if drawSide == 'r' else (leftN-3)), gauge=2)
 
+		tubeSpeed, tubeStitch, tubeRoller = None, None, None
 		if 'extensions' in info:
-			if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
-			if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
-			if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
+			if 'speedNumber' in info['extensions']: tubeSpeed = info['extensions']['speedNumber']
+			if 'stitchNumber' in info['extensions']: tubeStitch = info['extensions']['stitchNumber']
+			if 'rollerAdvance' in info['extensions']: tubeRoller = info['extensions']['rollerAdvance']
+			
+			setSettings(speed=tubeSpeed, stitch=tubeStitch, roller=tubeRoller)
+			# if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
+			# if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
+			# if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
 
 		if len(info): details = ' ' + str(info)
 		else: details = ''
@@ -1170,16 +1230,212 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 				
 				stitchPatFunc(k, length=(0.5 if pattern == 'interlock' else 1), c=c, **currArgs)
 			
-			if 'extensions' in info: #reset
-				if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
-				if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
-				if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
-			# if 'stitchNumber' in info: k.stitchNumber(stitchNumber) #reset
+			if 'extensions' in info: defaultSettings() #reset to defaults
+			# if 'extensions' in info: #reset
+			# 	if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
+			# 	if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
+			# 	if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
 
 	print('\nDone.')
 
 
-def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeedles=[], offLimits=[], firstTime=False, lastTime=False, justTuck=False, tuckNs=[], missN=None, tuckOver=[[], []]): #TODO: move this somewhere else in file (to a section where it fits better)
+# -------------------
+# colorwork functions
+
+def insert_item(dic, item={}, pos=None):
+	'''
+	Insert a key, value pair into an ordered dictionary.
+	Insert before the specified position.
+	'''
+	# from collections import OrderedDict
+	# d = OrderedDict(dic)
+	
+	# insert anywhere if argument pos not given:
+	if not pos or not len(dic):
+		dic.update(item)
+		return dic
+	
+	if not callable(pos): pos = lambda x: x == pos #change to lambda function so standardized
+	d = dict()
+	inserted = False
+	
+	item_k, item_v = list(item.items())[0]
+	for key, val in dic.items():
+		# insert key at stated position:
+		# if not inserted and key > n: #insert here
+		if not inserted and pos(key): #insert here
+			d[item_k] = item_v
+		
+		d[key] = val
+		
+	return d
+
+def colorworkTuck(n, direction, bed, tuckedNs, repRange):
+	if bed == 'f': eligible = lambda x: x % 2 == 0
+	else: eligible = lambda x: x % 2 != 0
+
+	if all(tuckedNs.values()): #they've all been tucked on
+		tuckedNs = dict(map(lambda x: (x[0], 0), tuckedNs.items()))
+
+	if n in tuckedNs:
+		if tuckedNs[n] > 0: #already been tucked on
+			# if direction == '+': repTucks = {key:val for (key,val) in tuckedNs.items() if key >= n and (key-n) <= repRange and eligible(key)} #find the needle within repRange that has been tucked on least thus far
+			if direction == '+': repTucks = {key:val for (key,val) in tuckedNs.items() if key in repRange and eligible(key)} #find the needle within repRange that has been tucked on least thus far
+			else: repTucks = {key:val for (key,val) in tuckedNs.items() if key in repRange and eligible(key)}
+			# else: repTucks = {key:val for (key,val) in tuckedNs.items() if key <= n and (n-key) <= repRange and eligible(key)}
+
+			if not len(repTucks): return tuckedNs, None #new
+
+			repTuck = min(repTucks.items(), key=lambda tN: tN[1])[0]
+			tuckedNs[repTuck] += 1
+
+			tuckedN = repTuck
+		else:
+			tuckedNs[n] += 1
+			tuckedN = n
+	else:
+		tuckedNs = insert_item(tuckedNs, {n: 1}, lambda x: x > n)
+		tuckedN = n
+
+	return tuckedNs, tuckedN
+
+
+def halfGaugeFairisle(k, r, edgeNeedles, needles, direction, bed, c, tuckedNs): #*#*#*
+	k.comment('start fairisle')
+
+	if r == 31 and bed == 'b': print('edgeNeedles:', edgeNeedles) #remove #debug
+
+	# shiftStart = ((r%2)+1)*2
+	shiftStart = (r%3)*2
+
+	edgeNs = edgeNeedles.copy()
+
+	if direction == '+': eligibleNs = range(edgeNeedles[0], edgeNeedles[-1]+1)
+	else: eligibleNs = range(edgeNeedles[0], edgeNeedles[-1]-1, -1) #neg
+
+	if r == 31 and bed == 'b': print('eligibleNs:', eligibleNs) #remove #debug
+
+	if bed == 'f':
+		adjust = 0
+		if edgeNs[0] % 2 != 0:
+			if direction == '+': edgeNs[0] += 1
+			else: edgeNs[0] -= 1
+		if edgeNs[-1] % 2 != 0:
+			if direction == '+': edgeNs[-1] -= 1
+			else: edgeNs[-1] += 1
+	else:
+		adjust = 1
+		# adjust = -1
+		if edgeNs[0] % 2 == 0:
+			if direction == '+': edgeNs[0] += 1
+			else: edgeNs[0] -= 1
+		if edgeNs[-1] % 2 == 0:
+			if direction == '+': edgeNs[-1] -= 1
+			else: edgeNs[-1] += 1
+
+	for idx, n in enumerate(needles):
+		if r == 31 and bed == 'b': print('n:', n+adjust) #remove #debug
+		if idx == 0 and abs(edgeNs[0]-n) > 4: #need to tuck from first edge needle to first knit needle to prevent dropping loops
+			if direction == '+':
+				repRange = range(edgeNs[0], (edgeNs[0]+shiftStart+4 if (edgeNs[0]+shiftStart+4) < n+adjust else n+adjust)) #new #check
+
+				for m in range(edgeNs[0]+shiftStart, n+adjust, 4):
+					tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+					if tuckedN is None: continue
+					k.tuck(direction, f'{bed}{tuckedN}', c)
+
+					repRange = range(tuckedN+1, (m+8 if (m+8) < n+adjust else n+adjust)) #new #*
+			else:
+				repRange = range(edgeNs[0], (edgeNs[0]-shiftStart-4 if (edgeNs[0]-shiftStart-4) > n+adjust else n+adjust), -1) #new #check
+
+				for m in range(edgeNs[0]-shiftStart, n+adjust, -4):
+					tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+					if tuckedN is None: continue
+					k.tuck(direction, f'{bed}{tuckedN}', c)
+
+					repRange = range(tuckedN-1, (m-8 if (m-8) > n+adjust else n+adjust), -1) #new #check
+		
+		if idx < len(needles)-1: #any needle but last needle
+			if (abs(n-needles[idx+1]) > 4): #need to tuck from most recently knit needle to current knit needle to prevent dropping loops
+				if shiftStart != 0 and (n+adjust) in eligibleNs: k.knit(direction, f'{bed}{n+adjust}', c)
+
+				if direction == '+':
+					repRange = range(n+adjust+1, (n+adjust+shiftStart+4 if (n+adjust+shiftStart+4) < (needles[idx+1]+adjust) else (needles[idx+1]+adjust))) #new #check
+
+					for m in range(n+adjust+shiftStart, needles[idx+1]+adjust, 4):
+						if m == n+adjust:
+							tuckedN = n+adjust #new #*
+							if m in eligibleNs: k.knit(direction, f'{bed}{m}', c)
+						else:
+							tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+							if tuckedN is None: continue
+							k.tuck(direction, f'{bed}{tuckedN}', c)
+
+						repRange = range(tuckedN+1, (m+8 if (m+8) < (needles[idx+1]+adjust) else (needles[idx+1]+adjust))) #new #*
+				else:
+					repRange = range(n+adjust-1, (n+adjust-shiftStart-4 if (n+adjust-shiftStart-4) > (needles[idx+1]+adjust) else (needles[idx+1]+adjust)), -1) #new #check
+
+					for m in range(n+adjust-shiftStart, needles[idx+1]+adjust, -4):
+						if r == 19 and c == '4': print('!', 'range:', repRange, needles[idx+1], m) #remove #debug
+						# if r == 42 and c == '1': print('\n', 'm:', m, 'needles[idx+1]:', needles[idx+1], 'n:', n, 'shiftStart:', shiftStart, 'repRange:', repRange, abs(n-needles[idx+1])) #remove #debug
+						if m == n+adjust:
+							tuckedN = n+adjust #new #*
+							if m in eligibleNs: k.knit(direction, f'{bed}{m}', c)
+						else:
+							tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+							if tuckedN is None: continue
+							k.tuck(direction, f'{bed}{tuckedN}', c)
+							
+						repRange = range(tuckedN-1, (m-8 if (m-8) > (needles[idx+1]+adjust) else (needles[idx+1]+adjust)), -1) #new #check
+			elif idx > 0 or (n+adjust) in eligibleNs: k.knit(direction, f'{bed}{n+adjust}', c) #just knit it
+		else: #last needle
+			if abs(edgeNeedles[-1]-n) > 4: #need to tuck from last knit needle to last edge needle to prevent dropping loops
+				if shiftStart != 0 and (n+adjust) in eligibleNs: k.knit(direction, f'{bed}{n+adjust}', c)
+
+				if direction == '+':
+					repRange = range(n+adjust+1, (n+adjust+shiftStart+4 if (n+adjust+shiftStart+4) < edgeNs[-1] else edgeNs[-1])) #new #check
+
+					for m in range(n+adjust+shiftStart, edgeNs[-1], 4):
+						if m == n+adjust:
+							tuckedN = n+adjust #new #*
+							if m in eligibleNs: k.knit(direction, f'{bed}{m}', c)
+						else:
+							tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+							if tuckedN is None: continue
+							k.tuck(direction, f'{bed}{tuckedN}', c)
+
+						repRange = range(tuckedN+1, (m+8 if (m+8) < edgeNs[-1] else edgeNs[-1])) #new #*
+					k.miss(direction, f'{bed}{edgeNeedles[-1]}', c)
+				else:
+					repRange = range(n+adjust-1, (n+adjust-shiftStart-4 if (n+adjust-shiftStart-4) > edgeNs[-1] else edgeNs[-1]), -1) #new #check
+
+					for m in range(n+adjust-shiftStart, edgeNs[-1], -4):
+						if m == n+adjust:
+							tuckedN = n+adjust #new #*
+							if m in eligibleNs: k.knit(direction, f'{bed}{m}', c)
+						else:
+							tuckedNs, tuckedN = colorworkTuck(m, direction, bed, tuckedNs, repRange)
+							if tuckedN is None: continue
+							k.tuck(direction, f'{bed}{tuckedN}', c)
+
+						repRange = range(tuckedN-1, (m-8 if (m-8) > edgeNs[-1] else edgeNs[-1]), -1) #new #check
+					k.miss(direction, f'{bed}{edgeNeedles[-1]}', c)
+			else: #last needle
+				if n+adjust in eligibleNs: k.knit(direction, f'{bed}{n+adjust}', c)
+				if n+adjust != edgeNeedles[-1]: k.miss(direction, f'{bed}{edgeNeedles[-1]}', c)
+
+	k.comment('end fairisle')
+
+	return tuckedNs
+
+
+# def halfGaugeJacquard(k, needles, startN, endN, length, c, bed): #*#*#*
+# 	for n in needles:
+# 		k.knit(f'{bed}{n}')
+
+
+
+def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeedles=[], offLimits=[], firstTime=False, lastTime=False, justTuck=False, tuckNs=[], missN=None, tuckOver=[[], []]): #TODO: move this somewhere else in file (to a section where it fits better) #TODO: get this working for when multiple sections all with simultaneous increasing!!!! #*#*#*#*
 	'''
 	*k is the knitout Writer
 	*startN is the needle closest to the main swatch that is meant to be knitted as part of the waste border on the side that will start on
@@ -1316,9 +1572,15 @@ def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeed
 
 				if distFromStart >= abs(interlockStartN-interlockEndN):
 					k.comment('get carrier in correct spot')
-					interlock(k, lastBorderN, tuckEndN, 0.5, c, gauge, startCondition=(2 if interlockStart[side2] == 1 else 1), emptyNeedles=offLimits)
+					if dir2 == '+': dropPlace = placeCarrier(k, rightN=tuckEndN, carrierOpts=[c])[0]
+					else: dropPlace = placeCarrier(k, leftN=tuckEndN, carrierOpts=[c])[0]
+					# interlock(k, lastBorderN, tuckEndN, 0.5, c, gauge, startCondition=(2 if interlockStart[side2] == 1 else 1), emptyNeedles=offLimits)
 					for bn in tList2:
 						if bn not in offLimits: k.tuck(dir1, bn, c)
+					
+					if len(dropPlace):
+						for bn in dropPlace:
+							k.drop(bn)
 
 				if (dir2 == '+' and tuckStartN >= needles[side2][0]) or (dir2 == '-' and tuckStartN <= needles[side2][0]):
 					if t == 0: checkAgain = True
@@ -1348,8 +1610,10 @@ def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeed
 			else: distFromStart = abs(lastBorderN-interlockStartN)
 			
 			if distFromStart >= abs(interlockStartN-interlockEndN):
-				k.comment(f'get carrier in correct spot !')
-				interlock(k, lastBorderN, (list(tuckRange)[-1]-1 if dir1 == '+' else list(tuckRange)[-1]+1), 0.5, c, gauge, startCondition=(2 if interlockStart[side2] == 1 else 1), emptyNeedles=offLimits)
+				k.comment(f'get carrier in correct spot')
+				if dir2 == '+': dropPlace = placeCarrier(k, rightN=list(tuckRange)[-1]-1, carrierOpts=[c])[0]
+				else: dropPlace = placeCarrier(k, leftN=list(tuckRange)[-1]+1, carrierOpts=[c])[0]
+				# interlock(k, lastBorderN, (list(tuckRange)[-1]-1 if dir1 == '+' else list(tuckRange)[-1]+1), 0.5, c, gauge, startCondition=(2 if interlockStart[side2] == 1 else 1), emptyNeedles=offLimits)
 			
 				tuckCt = {'f': 0, 'b': 0}
 				tuckInterval = 3
@@ -1362,6 +1626,10 @@ def wasteBorder(k, startN, endN, rows, c, widthL=4, widthR=4, gauge=2, emptyNeed
 						if (tuckCt['b']) % tuckInterval == 0:
 							k.tuck(dir1, f'b{n}', c)
 						tuckCt['b'] += 1
+
+				if len(dropPlace):
+					for bn in dropPlace:
+						k.drop(bn)
 
 		if firstTime:
 			if dir2 == '+': castonRange = range(interlockEndN, interlockStartN) #if starting on left side
@@ -2027,7 +2295,7 @@ def bindoff(k, count, xferNeedle, c, side='l', doubleBed=True, asDecMethod=False
 		if not asDecMethod: bindoffTail(k, xferNeedle, '-', c)
 
 
-def halfGaugeOpenBindoff(k, count, xferNeedle, c, side='l', asDecMethod=False, xtraSecure=False): #TODO: get this to work; add tucks, etc.
+def halfGaugeOpenBindoff(k, count, xferNeedle, c, side='l', asDecMethod=False, xtraSecure=False):
 	'''
 	*k is knitout Writer
 	*count is the number of *TODO
@@ -3234,9 +3502,92 @@ def spiral(k, startN, endN, c, length, sectionWidth=4, sectionHeight=2, bed='f',
 #--- IMAGE PROCESSING / KNITTING WITH KNITOUT FOR CACTUS-ESQUE THINGS ---
 #------------------------------------------------------------------------
 
+def getColorworkData(imagePath): #assumes prescaled
+	#1. Read image data from input path; resize based on gauge
+	imgData = Image.open(imagePath).convert('L')
+	
+	imgData = imgData.resize((round(imgData.width*0.5), imgData.height), Image.NEAREST) #scale down to half the size for width so will work for half gauge
+
+	imgData = imgData.transpose(Image.FLIP_TOP_BOTTOM) #so going from bottom to top
+
+	print(f"\nreading colorwork image from path '{imagePath}'...")
+
+	colCt = int(input(f"How many colors? "))
+	if query_yes_no('Would you like to use dithering?'): palDither = Image.FLOYDSTEINBERG
+	else: palDither = Image.NONE
+
+	if query_yes_no('Would you like to use a custom palette?'):
+		palData = []
+
+		print(f"\nColor values must be either a color name in string form e.g. 'red', or rgb tuple e.g. '255, 0, 0'.")
+		for col in range(1, colCt+1):
+			color = input(f'Color #{col}: ')
+			if ',' in color: palData.append(tuple(map(int, color.split(',')))) #rgb tuple aka '255, 0, 0'
+			else: palData.append(ImageColor.getcolor(color, 'P')) #string e.g. 'red'
+		
+		# palData.extend([(255, 255, 255)]*(256-len(palData)))
+
+		imgData = imgData.convert('RGB')
+
+		imgDataPal = imgData.getcolors()
+
+		palMap = []
+
+		for idx, p in enumerate(palData):
+			if p in imgDataPal: palMap.append([p, p])
+			else:
+				colDists = list(map(lambda x: colorDistance(x[1], p, returnRGBs=True), imgDataPal))
+
+				closestCol = imgDataPal[colDists.index(min([x for x in colDists if x[1] not in palData], key=lambda x: x[0]))][1]
+
+				print(f"\nColor '{p}' not in image, so using closest existing color '{closestCol}' as proxy.")
+
+				palData[idx] = closestCol #replace it with color that's actually in the image
+		
+		palData.extend([palData[0]]*(256-len(palData)))
+		palData = sum([list(x) for x in palData], [])
+
+		pal = Image.new('P', (1, 1))
+		pal.putpalette(palData)
+
+		imgData = imgData.quantize(colors=colCt, palette=pal, dither=palDither)
+		# imgData = imgData.convert('P', palette=pal, dither=palDither, colors=colCt)
+	else: imgData = imgData.convert('P', palette=Image.ADAPTIVE, dither=palDither, colors=colCt)
+
+	palette = imgData.getcolors() #remove #debug
+
+	main_col = max(palette, key=lambda p: p[0])[1]
+	# def get_dominant_color(pil_img):
+  #   img = pil_img.copy()
+  #   img.convert("RGB")
+  #   img.resize((1, 1), resample=0)
+  #   dominant_color = img.getpixel((0, 0))
+  #   return dominant_color
+
+	# print('palette:', palette) #remove #debug
+	
+	rows = []
+
+	for r in range(0, imgData.height):
+		row = {}
+		n = -0.5 #start here
+		for x in range(0, imgData.width):
+			n += 0.5
+			px = imgData.getpixel((x, r))
+
+			if px not in row: row[px] = [] #initiate
+
+			# row[px].append(n)
+			row[px].append(float(x)) #new
+
+		rows.append(row)
+
+	return rows, main_col
+
+
 plaitInfo = {'count': 0, 'assigned': 0, 'f': [], 'b': [], 'lastRows': {}, 'carriers': [], 'carrierPark': {}} #global
 
-def insertStitchPattern(k, stitchPat, needles, passEdgeNs, bed, side='l', c='1'):
+def insertStitchPattern(k, stitchPat, needles, passEdgeNs, bed, side='l', c='1'): #now works for colorwork too
 	'''
 	*k is knitout Writer
 	*stitchPat is an object with information pertaining to the stitch pattern section we're inserting
@@ -3250,6 +3601,7 @@ def insertStitchPattern(k, stitchPat, needles, passEdgeNs, bed, side='l', c='1')
 	- default stitch pattern is jersey (so if no blob, will treat as jersey)
 	'''
 	patName = stitchPat.pattern
+
 	if patName == 'interlock': patLength = 0.5
 	else: patLength = 1
 
@@ -3563,8 +3915,6 @@ def getStitchData(k, bed, shapeData, imagePath='graphics/stitch-pat-map.png', st
 			if 'plaitC' in pat.info and pat.info['passes'] < 2:
 				print(f'\nWARNING: changing pass count for a {pat.pattern} section with plaiting from {pat.info["passes"]} to {pat.info["passes"]+1} so plaiting carrier can be consistently parked and retrieved on the same side.')
 				pat.info['passes'] += 1
-
-	patKeys = list(stitchPatterns.keys())
 	
 	imgData = Image.open(imagePath)
 
@@ -3665,8 +4015,8 @@ def imgToStitchPatternMap(k, imgData, stitchPatColors, stitchPatCount):
 	return rows
 
 
-#--- FUNCTION TO PROCESS/ANALYZE CACTUS-ESQUE IMAGE AND OUTPUT KNITOUT ---
-def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, maxShortrowCount=1, addBindoff=True, excludeCarriers=[], addBorder=True, stitchPatternsFront={'imgPath': None, 'patterns': {}, 'colorArgs': {}}, stitchPatternsBack={'imgPath': None, 'patterns': {}, 'colorArgs': {}}, incMethod='split', openDec=False, closedCaston=True, openBindoff=False): #openDec == #new #TODO: if openDec, don't knit circularly -- instead, switch directions every row (e.g. f+ b-, b+ f-, f+ b-, b+ f-, etc.) #*#*#*
+#--- MAIN FUNCTION TO PROCESS/ANALYZE CACTUS-ESQUE IMAGE AND OUTPUT KNITOUT ---
+def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, maxShortrowCount=1, addBindoff=True, excludeCarriers=[], addBorder=True, stitchPatternsFront={'imgPath': None, 'patterns': {}, 'colorArgs': {}}, stitchPatternsBack={'imgPath': None, 'patterns': {}, 'colorArgs': {}}, colorImgFront=None, colorImgBack=None, incMethod='split', openShaping=False, closedCaston=True, openBindoff=False):
 	'''
 	*k is knitout Writer
 	*imagePath is the path to the image that contains the piece data
@@ -3684,7 +4034,10 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		- 'colorArgs': a list containing specific information about a particular blob of color in the image, with the color as the key and a sub-dictionary for the information as the value. The information should directly corresponding with a parameter in the function that executes the stitch pattern mapped to the color in 'patterns' (explained above); see the particular stitch pattern function definition for eligible parameter names (which should be the key in the sub-dict) and valid corresponding values (which should be the value in the sub-dict). Note that the key is the color, not the stitch pattern, so that you can specifying different information with different blobs of the same stitch pattern (e.g. 1 row of alternating knit-purl garter for one blob, and 4 for another).
 			- that might look something like this: {'red': {'patternRows': 1}, 'blue': {'patternRows': 4}, 'black': {'sequence': '1x1'}}
 	*stitchPatternsBack is the same as stitchPatternsFront, except for stitch patterns on the back bed
+	*colorImgFront is TODO
+	*colorImgBack is TODO
 	*incMethod is a string indicating the increasing method that should be used in the piece — valid values are 'split', 'xfer', and 'zig-zag' (NOTE: this might be overridden if a large amount of needles are involved in a particular increase [e.g. automatically zig-zag if > 4 needles in inc])
+	*openShaping is TODO
 	*closedCaston is a boolean that indicates whether we are using a closed cast-on (True) or open cast-on (False)
 	*openBindoff is a boolean that indicates whether we are using an open bindoff (True) or closed bindoff (False)
 
@@ -3767,10 +4120,26 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	if len(plaitStPatsRows): plaitStPatsRows.sort(key=lambda info: info[0]) #sort by row
 
 
+	colorworkDataF = None
+	colorworkDataB = None
+
+	mainCols = {}
+
+	colorworkPalF = None
+	colorworkPalB = None
+
+	if colorImgFront is not None: #TODO: choose main carrier by 
+		colorworkDataF, mainCols['f'] = getColorworkData(colorImgFront)
+		# stitchPatDetailsF.append(StitchPatDetails('fairisle'))
+	if colorImgBack is not None:
+		colorworkDataB, mainCols['b'] = getColorworkData(colorImgBack)
+		# stitchPatDetailsB.append(StitchPatDetails('fairisle'))
+
+
 	openDecData = None
 	openDecAreas = {} #new
-	if type(openDec) == str: #path to image indicating openDec areas
-		openDecData = Image.open(openDec).convert('L')
+	if type(openShaping) == str: #path to image indicating openShaping areas
+		openDecData = Image.open(openShaping).convert('L')
 
 		# if scale != 1: openDecData = openDecData.resize((openDecData.width*scale, openDecData.height*scale), Image.NEAREST) #scale image according to passed 'scale' value, if scale != 1
 		if openDecData.height != imgData.height or openDecData.width != imgData.width: #scale image to size of shape img
@@ -3789,7 +4158,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 			
 			if len(openDecRow): openDecAreas[r] = openDecRow
 
-		openDec = True #*	
+		openShaping = True #*	
 
 
 	carrierCount = 1
@@ -3859,7 +4228,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					row.append(section)
 
 					if r == 0 and castonLeftN is None: #new
-							castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[-1][len(row[-1])-1]) #new #*#*#* #TODO: if len(row) > 1: (store info about which loops to drop & do separate castons)
+							castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[-1][len(row[-1])-1])
 							if len(row) > 1: #multiple sections at the beginning
 								for s in range(0, len(row)-1): # -1 so don't do last section
 									sectEnd, sectStart = convertGauge(gauge, row[s][-1], row[s+1][0])
@@ -3903,7 +4272,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if not newSection: #very last section
 						# if r == 0: castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[0][len(row[0])-1])
 						if r == 0:
-							castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[-1][len(row[-1])-1]) #new #*#*#* #TODO: if len(row) > 1: (store info about which loops to drop & do separate castons)
+							castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[-1][len(row[-1])-1])
 							if len(row) > 1: #multiple sections at the beginning
 								for s in range(0, len(row)-1): # -1 so don't do last section
 									sectEnd, sectStart = convertGauge(gauge, row[s][-1], row[s+1][0])
@@ -3982,7 +4351,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		borderC = None
 		drawC = carrierOrder[-1] #whichever carrier comes in last
 	
-	otherCs = []
+	otherCs = [] #beep
 	for cs in carrierOrder:
 		takeOutAtEnd.append(cs)
 		if cs != drawC and cs != wasteC: otherCs.append(cs)
@@ -4002,13 +4371,55 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	workingRows = {mainC: [0]}
 
 	wasteWeights = {}
-	wasteBoundaryExpansions = {}
+	wasteBoundaryExpansions = {} #TODO: simplify this... the way it is currently handled is kinda messy and confusing, + doesn't work for when multiple sections with simultaneous increasing #*#*#*#*
+
+	colorworkCs = {}
+
+	colorworkRowsF = []
+	colorworkRowsB = []
+
+	colorworkTucks = {'f': {}, 'b': {}}
+
+	def replaceColorworkC(oldColRows, newColRows):
+		oldColRows = newColRows
+
+
+	def colorworkOverlap(r, bed, colData, leftN, rightN, c):
+		sectData = {}
+
+		if colData is not None:
+			overlapSectCt = sum(any(cN <= rightN and cN >= leftN for cN in col_sect) for col_sect in colData[r].values())
+
+			for colKey, colSect in colData[r].items():
+				overlapNs = list(filter(lambda cN: cN <= rightN and cN >= leftN, colSect))
+				# convert to gauge
+				overlapNs = list(map(lambda cN: convertGauge(2, cN), overlapNs))
+
+				# if colSect[0] <= rightN and colSect[-1] >= leftN: #colorwork overlaps
+				if len(overlapNs): #colorwork overlaps
+					if c not in colorworkCs: colorworkCs[c] = {}
+
+					if colKey not in colorworkCs[c]:
+						if colKey == mainCols[bed] or overlapSectCt == 1: #main color or only one section that overlaps
+							colorworkCs[c][colKey] = c #use main carrier #TODO: make k == (whatever color is on front and back bed)
+						elif len(availableCarriers):
+							colorworkCs[c][colKey] = availableCarriers.pop() #new #*
+							otherCs.append(colorworkCs[c][colKey]) #new
+							takeOutAtEnd.append(colorworkCs[c][colKey])
+						else: colorworkCs[c][colKey] = f'!{colKey}' #no carriers available #TODO: make this {}
+						# else: print('\nWARNING: not enough available carriers for colorwork.') #remove #?
+
+					sectData[colorworkCs[c][colKey]] = overlapNs
+
+		return sectData #TODO: make this None if no overlap
+	
 
 	for r in range (0, len(rows)):
 		rowMap = {}
 
 		taken = [] #not sure if this is really needed, but it's just an extra step to absolutely ensure two sections in one row don't used same carrier
 
+		colRowMapF, colRowMapB = {}, {} #new
 		#loop through sections in row
 		for i in reversed(range(0, len(rows[r]))): #go backwards so new carriers are added on left
 			leftN = rows[r][i][0] #detect the left and right-most needle in each section for that row
@@ -4028,9 +4439,9 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				else: #it's a match!
 					if not leftDec and (sections[s].leftN - leftN) < 0: leftDec = True
 
-					if addBorder and (sections[s].leftN - leftN) > 0: #increase
+					if addBorder and (sections[s].leftN - leftN) > 0: #increase #TODO: fix this (with wasteBoundaryExpansions) #*#*#*#* #v
 						#detect if increasing is in the middle (overlapping with existing section) or on the side
-						if not any(sections[s].leftN in sect for sect in rows[r-1]): increasing = True #note: don't have to do if r>0 bc all section `leftN`s would be None at that point
+						if not any(leftN in sect for sect in rows[r-1]): increasing = True #note: don't have to do if r>0 bc all section `leftN`s would be None at that point
 
 						if r not in wasteWeights: wasteWeights[r] = dict()
 						
@@ -4047,6 +4458,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 									expandBoundaryRow = None
 									wasteRightBoundary = sectionLeftN-1
 								elif sectionLeftN-1 > wasteRightBoundary and expandBoundaryRow is None: expandBoundaryRow = p
+
 						if expandBoundaryRow is not None:
 							if expandBoundaryRow in wasteBoundaryExpansions: wasteBoundaryExpansions[expandBoundaryRow] = convertGauge(gauge, rightN=sections[s].leftN-1)
 							else:
@@ -4057,14 +4469,15 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 					if not rightDec and (rightN - sections[s].rightN) < 0: rightDec = True
 
-					if addBorder and rightN - sections[s].rightN > 0: #increase
-						if not any(sections[s].rightN in sect for sect in rows[r-1]): increasing = True #new #check
+					if addBorder and rightN - sections[s].rightN > 0: #increase #TODO: fix this (with wasteBoundaryExpansions) #*#*#*#* #v
+						if not any(rightN in sect for sect in rows[r-1]): increasing = True
 
 						if len(wasteWeights) == 0: rightCarriers.append(borderC) #meaning first wasteWeight is on the right
 						if r not in wasteWeights: wasteWeights[r] = dict()
 						
 						if r - wasteWeightsRowCount > 0: pStart = r - wasteWeightsRowCount
 						else: pStart = 0
+
 						wasteLeftBoundary = None
 						expandBoundaryRow = None
 						for p in range(pStart, r): #to make sure wasteWeights aren't knitted on taken needles
@@ -4080,6 +4493,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							else:
 								wasteBoundaryExpansions[expandBoundaryRow] = convertGauge(gauge, leftN=sections[s].rightN+1)
 
+						if wasteLeftBoundary is None:
+							wasteLeftBoundary = leftN #new #check #beep
 						wasteWeights[r]['right'] = list(convertGauge(gauge, wasteLeftBoundary, rightN))
 						if borderC not in firstNeedles: firstNeedles[borderC] = list(convertGauge(gauge, leftN, wasteLeftBoundary-1))
 
@@ -4087,6 +4502,13 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					sections[s].rightN = rightN
 					sections[s].row = r #update row so know which is last
 					newRowSection = {carrierOrder[s]: rows[r][i]}
+
+					colSectF = colorworkOverlap(r, 'f', colorworkDataF, leftN, rightN, carrierOrder[s])
+					colSectB = colorworkOverlap(r, 'b', colorworkDataB, leftN, rightN, carrierOrder[s])
+
+					if len(colSectF): colRowMapF[carrierOrder[s]] = colSectF
+					if len(colSectB): colRowMapB[carrierOrder[s]] = colSectB
+
 					rowMap = {**newRowSection, **rowMap} #add new section to beginning of rowMap since looping in reverse
 					taken.append(s)
 					match = True
@@ -4116,14 +4538,15 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 								if carrierOrder[s] in pieceMap[p]:
 									relevantSection = pieceMap[p][carrierOrder[s]]
 									sectionRightN = relevantSection[len(relevantSection)-1]
-								if wasteLeftBoundary is None or sectionRightN >= wasteLeftBoundary:
-									wasteLeftBoundary = sectionRightN+1
-								elif sectionRightN+1 < wasteLeftBoundary and expandBoundaryRow is None: expandBoundaryRow = p
+									if wasteLeftBoundary is None or sectionRightN >= wasteLeftBoundary:
+										wasteLeftBoundary = sectionRightN+1
+									elif sectionRightN+1 < wasteLeftBoundary and expandBoundaryRow is None: expandBoundaryRow = p
 							if expandBoundaryRow is not None:
 								if expandBoundaryRow in wasteBoundaryExpansions: wasteBoundaryExpansions[expandBoundaryRow] = convertGauge(gauge, leftN=sections[s].rightN+1)
 								else:
 									wasteBoundaryExpansions[expandBoundaryRow] = convertGauge(gauge, leftN=sections[s].rightN+1)
 
+							if wasteLeftBoundary is None: wasteLeftBoundary = prevSectionEnd + 1 #new #* #beep
 							wasteWeights[r]['right'] = list(convertGauge(gauge, wasteLeftBoundary, rightN))
 							if borderC not in firstNeedles: firstNeedles[borderC] = list(convertGauge(gauge, leftN, wasteLeftBoundary-1))
 
@@ -4131,10 +4554,21 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				sections[unusedC].leftN = leftN
 				sections[unusedC].rightN = rightN
 				newRowSection = {carrierOrder[unusedC]: rows[r][i]}
+
+				colSectF = colorworkOverlap(r, 'f', colorworkDataF, leftN, rightN, carrierOrder[unusedC])
+				colSectB = colorworkOverlap(r, 'b', colorworkDataB, leftN, rightN, carrierOrder[unusedC])
+
+				if len(colSectF): colRowMapF[carrierOrder[unusedC]] = colSectF
+				if len(colSectB): colRowMapB[carrierOrder[unusedC]] = colSectB
+
 				rowMap = {**newRowSection, **rowMap} #add new section to beginning of rowMap since looping in reverse
 
 		pieceMap.append(rowMap)
+
+		if len(colRowMapF): colorworkRowsF.append(colRowMapF)
+		if len(colRowMapB): colorworkRowsB.append(colRowMapB)
 	# -----------------------
+
 	if addBorder: print(f'\nincreasing is {increasing}') #debug
 
 	# for idx, rMap in enumerate(pieceMap): #remove #debug #v
@@ -4562,7 +4996,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	if drawC not in carrierOrder and not addBorder and addBindoff:
 		borderC = None
 
-		if not openDec or (not leftDec and not rightDec): #TODO: change this to work with multiple sections #*#*#*
+		if not openShaping or (not leftDec and not rightDec): #TODO: change this to work with multiple sections #*#*#*
 			takeOutAtEnd.remove(drawC)
 			k.outcarrier(drawC)
 			takenOutCarriers.append(drawC)
@@ -4652,7 +5086,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	#--- MAIN PART OF FUNCTION ---
 	r = 0
 	while r < len(pieceMap):
-		sectionCount = len(pieceMap[r]) #number of sections in this row
+		sectionCount = len(pieceMap[r]) #number of sections in this row #TODO: adjust this for colorwork
 		mapKeys = list(pieceMap[r].keys()) #carriers used in this row
 
 		if (r+1) < len(pieceMap)-1 and (sectionCount < len(pieceMap[r+1]) or sectionCount > len(pieceMap[r+1])): sectionCountChangeNext = True #if new section coming up next, or section is ending & no longer exists next
@@ -4702,12 +5136,14 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						if patRightN <= n2: overlap.append(patRightN)
 						else: overlap.append(n2)
 						patterns[pat] = overlap
+			
 			return patterns
 		#--- end findPatterns func ---#^
 
 
 		patternsF = findPatterns(stitchPatDataF)
 		patternsB = findPatterns(stitchPatDataB)
+
 
 		placementPass = []
 
@@ -4739,11 +5175,14 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if n not in prevRowNeedles: newNeedles.append(n)
 			
 			if len(newNeedles):
-				k.rack(0.25)
-				for n in range(0, len(newNeedles)):
-					if f'f{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'f{n}', carrier)
-					if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'b{n}', carrier)
-				k.rack(0)
+				if openShaping: #TODO: make this based on img too!
+					openTubeCaston(k, startN=newNeedles[0], endN=newNeedles[-1], c=carrier, gauge=2) #TODO: make sure this doesn't cause issues if new needles attached to existing section
+				else:
+					k.rack(0.25)
+					for n in range(0, len(newNeedles)):
+						if f'f{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'f{newNeedles[n]}', carrier)
+						if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'b{newNeedles[n]}', carrier)
+					k.rack(0)
 
 				dir2 = '-'
 				needleRange = range(n2, n1-1, -1)
@@ -4751,9 +5190,10 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					dir2 = '+'
 					needleRange = range(n1, n2+1)
 
-				k.comment('back pass to get carrier on correct side')
-				for n in range(len(newNeedles)-1, -1, -1): #back pass to get carrier on correct side
-					if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir2, f'b{n}', carrier)
+				if not openShaping:
+					k.comment('back pass to get carrier on correct side')
+					for n in range(len(newNeedles)-1, -1, -1): #back pass to get carrier on correct side
+						if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir2, f'b{newNeedles[n]}', carrier)
 			else:
 				prevLeftN = prevRowNeedles[0]
 				if prevLeftN < n1: xferL = prevLeftN - n1 #new #*
@@ -4789,11 +5229,22 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if pC == carrier: continue
 					elif pC not in mapKeys: #the section that was finished
 						finishedSectNs = pieceMap[r-1][pC]
+
 						finishedLeftN, finishedRightN = convertGauge(gauge, finishedSectNs[0], finishedSectNs[len(finishedSectNs) - 1])
 
 						if n1 <= finishedRightN and n2 >= finishedLeftN:
-							xferL = finishedLeftN-n1
-							placementLeft = True
+							if prevLeftN > finishedRightN:
+								xferL = finishedLeftN-n1 #section is to the left of it
+								placementLeft = True
+							else: #beep
+								prevRightN = finishedRightN #new
+								xferR = n2-finishedRightN
+								if dir1 == '-': #back pass to place carrier (for now; #TODO: have prev row just knit up until edge)
+									k.comment('placement pass')
+									for n in range(prevRightN+1, n2+1):
+										if (n+1) % gauge == 0: k.knit('+', f'b{n}', carrier) #new
+							# xferL = finishedLeftN-n1
+							# placementLeft = True
 							print('\nNOTE: adjusting for merged tube.')
 						#TODO: check if need to add if n2 >= finishedLeftN
 						if n2 > finishedRightN and n1 < finishedRightN: incMid = True #increasing in middle
@@ -4801,37 +5252,27 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		#*#*#* #new #* #v
 		doublePass1 = False #new #*
 		placeXtraC = False #new #*
-		# if switchDir is None: #TODO: deal with this for when multiple shortrow sections
+
 		openDecSectL, openDecSectR = False, False
-		if openDec and gauge == 2:
-			if xferL < 0 and (not len(openDecAreas) or (r in openDecAreas and n1 in openDecAreas[r])): openDecSectL = True
-			if xferR < 0 and (not len(openDecAreas) or (r in openDecAreas and n2 in openDecAreas[r])): openDecSectR = True
+		if openShaping and gauge == 2:
+			if (not len(openDecAreas) and xferL < 0) or (r in openDecAreas and n1 in openDecAreas[r]): openDecSectL = True
+			if (not len(openDecAreas) and xferR < 0) or (r in openDecAreas and n2 in openDecAreas[r]): openDecSectR = True
 
 		if switchDir[carrier] is None: #TODO: deal with this for when multiple shortrow sections
-			if openDec and gauge == 2:
-				# if xferL < 0: #decreasing; will be open
-				# if xferL < 0 and (not len(openDecAreas) or (r in openDecAreas and n1 in openDecAreas[r])): #decreasing; will be open
+			if openShaping and gauge == 2:
 				if openDecSectL: #decreasing; will be open
 					openSide[carrier] = 'l' #new #*
 					switchDir[carrier] = True #decreasing
-					# openSide = 'l'
-					# switchDir = True #decreasing
-				# if xferR < 0:
-				# if xferR < 0 and (not len(openDecAreas) or (r in openDecAreas and n2 in openDecAreas[r])): #decreasing; will be open
+				
 				if openDecSectR: #decreasing; will be open
 					if openSide[carrier] == 'l': openSide[carrier] = 'both'
 					else: openSide[carrier] = 'r'
 					switchDir[carrier] = True #decreasing
-					# if openSide == 'l': openSide = 'both'
-					# else: openSide = 'r'
-					# switchDir = True #decreasing
 		else:
-
-			# switchDir = not switchDir #alternate
 			switchDir[carrier] = not switchDir[carrier] #alternate
 
-			# if (openSide == 'l' and xferR < 0) or (openSide == 'r' and xferL < 0):
-			if (openSide[carrier] == 'l' and xferR < 0 and (not len(openDecAreas) or (r in openDecAreas and n2 in openDecAreas[r]))) or (openSide[carrier] == 'r' and xferL < 0 and (not len(openDecAreas) or (r in openDecAreas and n1 in openDecAreas[r]))):
+			# if (openSide[carrier] == 'l' and xferR < 0 and (not len(openDecAreas) or (r in openDecAreas and n2 in openDecAreas[r]))) or (openSide[carrier] == 'r' and xferL < 0 and (not len(openDecAreas) or (r in openDecAreas and n1 in openDecAreas[r]))):
+			if (openSide[carrier] == 'l' and ((not len(openDecAreas) and xferR < 0) or (r in openDecAreas and n2 in openDecAreas[r]))) or (openSide[carrier] == 'r' and ((not len(openDecAreas) and xferL < 0) or (r in openDecAreas and n1 in openDecAreas[r]))):
 				if len(reusableCarriers):
 					bothOpenXtraC = {}
 					if len(rightReusableCs): #prioritize carriers no longer in use but not yet taken out (currently parked on right side) --> will knit in neg direction
@@ -4873,18 +5314,11 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if bothOpenXtraC['bed'] == 'f':
 						if (dir1 == '+' and not switchDir[carrier]) or (dir1 == '-' and switchDir[carrier]): switchDir[carrier] = not switchDir[carrier] #since main carrier would have ended up on: 1) [dir1 == '+'] left side (aka most recently a neg pass), so need to make sure it has a positive pass this time or 2) [dir1 == '-'] right side (aka most recently a pos pass), so need to make sure it has a neg pass this time #check
 						if (carrierFromRight and not switchDir[carrier]) or (not carrierFromRight and switchDir[carrier]): placeXtraC = True
-						# if (dir1 == '+' and not switchDir) or (dir1 == '-' and switchDir): switchDir = not switchDir #since main carrier would have ended up on: 1) [dir1 == '+'] left side (aka most recently a neg pass), so need to make sure it has a positive pass this time or 2) [dir1 == '-'] right side (aka most recently a pos pass), so need to make sure it has a neg pass this time #check
-						# if (carrierFromRight and not switchDir) or (not carrierFromRight and switchDir): placeXtraC = True
-
 					elif bothOpenXtraC['bed'] == 'b':
 						if (dir1 == '+' and switchDir[carrier]) or (dir1 == '-' and not switchDir[carrier]): switchDir[carrier] = not switchDir[carrier] #new
 
 						if (carrierFromRight and switchDir[carrier]) or (not carrierFromRight and not switchDir[carrier]): placeXtraC = True
-						# if (dir1 == '+' and switchDir) or (dir1 == '-' and not switchDir): switchDir = not switchDir #new
 
-						# if (carrierFromRight and switchDir) or (not carrierFromRight and not switchDir): placeXtraC = True
-
-					# openSide = 'both' #new #*
 					openSide[carrier] = 'both' #new #*
 
 					if carrier in rightCarriers: rightCarriers.remove(carrier) #switch it so dir1 will be '+' from now on
@@ -4896,21 +5330,18 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if openSide[carrier] == 'both': openSide[carrier] = 'r'
 					else: openSide[carrier] = None #if also detected above that no longer open on right
 
-		# if switchDir:
-		# 	if carrier in rightCarriers and openSide == 'l': #add extra pass to get it to correct side + take it out of rightCarriers #TODO: figure out if need to update stuff for plaiting then
 		if switchDir[carrier]:
 			if carrier in rightCarriers and openSide[carrier] == 'l': #add extra pass to get it to correct side + take it out of rightCarriers #TODO: figure out if need to update stuff for plaiting then
 				print(f'Double pass for carrier {carrier} since the left side is open and it is moving out of rightCarriers') #new #debug
 				rightCarriers.remove(carrier)
 				doublePass1 = True
-			# elif carrier not in rightCarriers and openSide == 'r':
 			elif carrier not in rightCarriers and openSide[carrier] == 'r':
 				print(f'Double pass for carrier {carrier} since the right side is open and it is moving into rightCarriers') #new #debug
 				rightCarriers.append(carrier)
 				doublePass1 = True
 
 
-		def insertBorder(justTuck=False, shiftTuckNs=[], switch=False): #v
+		def insertBorder(justTuck=False, shiftTuckNs=[], switch=False): #v #TODO: get this working for when multiple sections all with simultaneous increasing!!!! #*#*#*#*
 			k.comment(f'insert border for row {r} to secure carrier {carrier}') #remove #?
 			offLimits = []
 			additionalDrop = []
@@ -5119,7 +5550,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							for n in toDrop:
 								k.drop(n)
 							toDrop = []
-							droppedTucks = True
+							droppedTucks = True #remove #?
 							borderToDrop, borderMissN, dropBorder, nextTuckNs = insertBorder()
 							toDrop.extend(borderToDrop)
 							borderStartLeft = not borderStartLeft
@@ -5128,7 +5559,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if xferL == gradualSplit: splitType = 'gradual'
 					else: splitType = 'double'
 
-					# newLeftN, twistedLeft = incDoubleBed(k, count=xferL, edgeNeedle=prevLeftN, c=carrier, side='l', gauge=gauge, emptyNeedles=emptyNeedles, incMethod=incMethod, splitType=splitType)
 					newLeftN, twistedLeft = incDoubleBed(k, count=xferL, edgeNeedle=prevLeftN, c=leftC, side='l', gauge=gauge, emptyNeedles=emptyNeedles, incMethod=incMethod, splitType=splitType)
 					twistedStitches.extend(twistedLeft)
 
@@ -5147,7 +5577,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						tuckOverDrop = k.tuckOverSplit(borderC, '+') #NOTE: currently has roller advance same as main... change?
 						toDrop.extend(tuckOverDrop)
 
-						# newLeftN, twistedLeft = incDoubleBed(k, count=xferL, edgeNeedle=newLeftN, c=carrier, side='l', gauge=gauge, incMethod='split', splitType='gradual')
 						newLeftN, twistedLeft = incDoubleBed(k, count=xferL, edgeNeedle=newLeftN, c=leftC, side='l', gauge=gauge, incMethod='split', splitType='gradual')
 						twistedStitches.extend(twistedLeft)
 
@@ -5175,9 +5604,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					
 					return sortBedNeedles(toDrop)
 				else: #decrease
-					# newLeftN, stackedLoopNeedles, twistedLeft = decDoubleBed(k, abs(xferL), prevLeftN, carrier, 'l', gauge, emptyNeedles)
-					# twistedStitches.extend(twistedLeft) #remove #?
-					# if openDec and gauge == 2: #pos bed # posBedCondition(prevLeftN)
 					if openDecSectL: #pos bed # posBedCondition(prevLeftN)
 						if abs(xferL) <= 2: newLeftN, stackedLoopNeedles = halfGaugeOpenDec(k, abs(xferL), prevLeftN, leftC, 'l', emptyNeedles)
 						else:
@@ -5206,6 +5632,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					else:
 						newLeftN, stackedLoopNeedles, twistedLeft = decDoubleBed(k, abs(xferL), prevLeftN, carrier, 'l', gauge, emptyNeedles)
 						
+						if len(twistedLeft) and dir1 == '+': twistedLeft = list(filter(lambda bn: bn[:1] == posBed, twistedLeft)) #because otherwise, will drop it #new
+
 						twistedStitches.extend(twistedLeft) #^
 
 					if dir1 == '-': #rightShaping happened first
@@ -5295,7 +5723,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 					return sortBedNeedles(toDrop)
 				else: #decrease
-					# if openDec and gauge == 2:
+					# if openShaping and gauge == 2:
 					if openDecSectR:
 						if abs(xferR) <= 2: newRightN, stackedLoopNeedles = halfGaugeOpenDec(k, abs(xferR), prevRightN, rightC, 'r', emptyNeedles)
 						else:
@@ -5325,6 +5753,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					else:
 						newRightN, stackedLoopNeedles, twistedRight = decDoubleBed(k, abs(xferR), prevRightN, carrier, 'r', gauge, emptyNeedles)
 						
+						if len(twistedRight) and dir1 == '-': twistedRight = list(filter(lambda bn: bn[:1] == negBed, twistedRight)) #because otherwise, will drop it #TODO: maybe stitch to just if len(twistedRight) #? #new
+
 						twistedStitches.extend(twistedRight) #^
 
 					if dir1 == '+': #leftShaping happened first
@@ -5357,8 +5787,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						if f'{posBed}{n}' not in emptyNeedles: k.knit('+', f'{posBed}{n}', bedCarriers[posBed]) #* #TODO: see if this becomes a problem with posBed & negBed
 						# if f'f{n}' not in emptyNeedles: k.knit('+', f'f{n}', carrier)
 
-			# if prevLeftN is not None and (dir1 == '-' or (dir1 == '+' and openDec and gauge == 2 and xferL < -2)): leftMostN = prevLeftN
-			if prevLeftN is not None and ((dir1 == '-' and not doublePass1) or (dir1 == '+' and openDec and gauge == 2 and xferL < -2)): leftMostN = prevLeftN
+			# if prevLeftN is not None and (dir1 == '-' or (dir1 == '+' and openShaping and gauge == 2 and xferL < -2)): leftMostN = prevLeftN
+			if prevLeftN is not None and ((dir1 == '-' and not doublePass1) or (dir1 == '+' and openShaping and gauge == 2 and xferL < -2)): leftMostN = prevLeftN
 			else: leftMostN = n1
 
 
@@ -5447,23 +5877,59 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 			#--- end plainKnitNeg func ---#^
 
 
-			if negBed == 'b': #new #*#*#* #v
+			if negBed == 'b':
 				negPatterns = patternsB
 				negPatDetails = stitchPatDetailsB
 				negPatData = stitchPatDataB
+
+				# negColData = colorworkDataB #new
+				negColRows = colorworkRowsB
 			else:
 				negPatterns = patternsF
 				negPatDetails = stitchPatDetailsF
-				negPatData = stitchPatDataF #^
+				negPatData = stitchPatDataF
+				
+				# negColData = colorworkDataF #new
+				negColRows = colorworkRowsF
+			
+			def fairisleKnitNeg(leftN, rightN): # (passLeftN, passRightN) if len(colRowMapF): colorworkRowsF.append(colRowMapF)
+				if len(negColRows) and carrier in negColRows[r]:
+					newColRows = None
 
-			# if len(patternsB):
+					for colC, colNs in negColRows[r][carrier].items():
+						if colC[0] == '!': #no carrier assigned yet
+							if colorworkCs[carrier][int(colC[1:])][0] != '!': newColC = colorworkCs[carrier][int(colC[1:])] #already reassigned with pos
+							elif len(reusableCarriers):
+								newColC = reusableCarriers.pop()
+								print(f'\nWARNING: reusing carrier {newColC} for colorwork section.')
+							else: return False
+
+							newColRows = deepcopy(negColRows)
+
+							for colR, colS in enumerate(newColRows):
+								if carrier in colS:
+									if colC in colS[carrier]: newColRows[colR][carrier][newColC] = newColRows[colR][carrier].pop(colC)
+							
+							colorworkCs[carrier][colC] = newColC
+							colorworkTucks[negBed] = halfGaugeFairisle(k, r, [rightMostN, leftMostN], list(reversed(colNs)), '-', negBed, newColC, colorworkTucks[negBed])
+							continue
+						
+						# if colC == carrier and rightN > colNs[-1]: plainKnitNeg(colNs[-1]+1, rightN) #new #*
+						
+						colorworkTucks[negBed] = halfGaugeFairisle(k, r, [rightMostN, leftMostN], list(reversed(colNs)), '-', negBed, colC, colorworkTucks[negBed])
+
+						# if colC == carrier and leftN < colNs[0]: plainKnitNeg(leftN, colNs[0]-1) #new #*
+
+					if newColRows is not None: replaceColorworkC(negColRows, newColRows)
+
+					return True
+				else: return False
+
+
 			if len(negPatterns): #new #*
-				# passRightN = n2
 				passRightN = rightMostN #new #*
 				passLeftN = leftMostN
 
-				# for idx in reversed(list(patternsB.keys())):
-				# 	patNs = patternsB[idx].copy()
 				for idx in reversed(list(negPatterns.keys())): #new #* #v
 					patNs = negPatterns[idx].copy() #^
 					patLeftN = patNs[0]
@@ -5472,8 +5938,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if patRightN < leftMostN: break #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 
 					if passRightN > (patRightN+1):
-						# plainKnitBack(patRightN+1, passRightN)
-						plainKnitNeg(patRightN+1, passRightN) #new #*
+						if not fairisleKnitNeg(patRightN+1, passRightN): plainKnitNeg(patRightN+1, passRightN) #new #*
 
 					if patLeftN < leftMostN: patNs[0] = leftMostN #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 
@@ -5565,15 +6030,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 								k.miss('+', f'f{patNs[-1]+3}', pC[0]) #closer to right side, pos miss
 								plaitInfo['carrierPark'][pC[0]] = patNs[-1]+3
 						k.rollerAdvance(rollerAdvance)
-					
 
-					# k.comment(f'insert stitch pattern for bed b ({patPasses} pass count)') #remove #?
-
-					# if 'stitchNumber' in stitchPatDetailsB[idx].info: k.stitchNumber(stitchPatDetailsB[idx].info['stitchNumber'])
-
-					# insertStitchPattern(k, stitchPat=stitchPatDetailsB[idx], needles=patNeedles, passEdgeNs=[leftMostN, n2], bed='b', side='r', c=carrier)
-
-					# if 'stitchNumber' in stitchPatDetailsB[idx].info: k.stitchNumber(stitchNumber) #reset
 					k.comment(f'insert stitch pattern for bed {negBed} ({patPasses} pass count)') #new #* #v
 
 					if 'stitchNumber' in negPatDetails[idx].info: k.stitchNumber(negPatDetails[idx].info['stitchNumber'])
@@ -5597,17 +6054,9 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							k.drop(bn)
 						k.rollerAdvance(rollerAdvance)
 
-					# if len(openTuckDrop): #new #v
-					# 	k.rollerAdvance(0)
-					# 	for bn in openTuckDrop:
-					# 		k.drop(bn)
-					# 	k.rollerAdvance(rollerAdvance)
-					# 	openTuckDrop = [] #new #^
-
 					if plaitC is not None and sectionCountChangeNext and (sectionCount < len(pieceMap[r+1])):
 						k.comment(f'miss plaitC out of way of upcoming new section')
 						k.rollerAdvance(0)
-						# if stitchPatDetailsB[idx].info['plaitCside'] == 'l':
 						if negPatDetails[idx].info['plaitCside'] == 'l': #new #*
 							k.miss('-', f'f{rowsEdgeNeedles[r][0]}', plaitC)
 							plaitInfo['carrierPark'][plaitC] = rowsEdgeNeedles[r][0]
@@ -5618,19 +6067,22 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				
 					passRightN = patLeftN-1
 
-				# if passRightN > passLeftN: plainKnitNeg(passLeftN, passRightN) #new #* #xtra
-				if passRightN >= passLeftN: plainKnitNeg(passLeftN, passRightN) #new #* # >= because patLeftN-1 not patLeftN
-			else: plainKnitNeg(leftMostN, rightMostN) #new #leftMostN #*
-				# plainKnitBack(n1, n2)
-				# plainKnitNeg(leftMostN, n2) #new #leftMostN #*
-				
+				# if passRightN > (patRightN+1):
+				if passRightN >= passLeftN:
+					if not fairisleKnitNeg(passLeftN, passRightN): plainKnitNeg(passLeftN, passRightN) #new #* # >= because patLeftN-1 not patLeftN
+					# if carrier in negColData[r] and negColData[r][carrier][0] <= passRightN and negColData[r][carrier][-1] >= passLeftN:
+					# 	colNs = negColData[r][carrier].copy()
 
-				# if len(openTuckDrop): #new #v
-				# 	k.rollerAdvance(0)
-				# 	for bn in openTuckDrop:
-				# 		k.drop(bn)
-				# 	k.rollerAdvance(rollerAdvance)
-				# 	openTuckDrop = [] #new #^
+					# 	if passRightN > colNs[-1]: plainKnitNeg(colNs[-1]+1, passRightN) #new #*
+
+					# 	halfGaugeFairisle(k, list(filter(lambda cN: cN >= passRightN and cN <= passLeftN, colNs)), carrier, '-', negBed)
+
+					# 	if passLeftN < colNs[0]: plainKnitNeg(patRightN+1, colNs[0]-1) #new #*
+					# else: plainKnitNeg(passLeftN, passRightN) #new #* # >= because patLeftN-1 not patLeftN
+			# else: plainKnitNeg(leftMostN, rightMostN) #new #leftMostN #*
+			else:
+				if not fairisleKnitNeg(leftMostN, rightMostN): plainKnitNeg(leftMostN, rightMostN) #new #leftMostN #*
+			
 
 			if len(knitStacked): #TODO: figure out if this is causing a float
 				for bn in knitStacked:
@@ -5641,7 +6093,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if addBorder and xferR > 0: toDrop = rightShaping(bedCarriers[posBed])
 				else: knitStacked = rightShaping(bedCarriers[posBed]) #TODO: deal with toDrop and knitStacked somewhere else now, I guess #^ (or maybe not #? since might not have those returns due to open dec) #TODO figure out if this should go before or after bit below #v
 				
-			if dir1 == '+' and openDec and gauge == 2 and xferL < -2: #* #left shaping happened first & keep to complete open tube bindoff shaping on left for other bed
+			if dir1 == '+' and openShaping and gauge == 2 and xferL < -2: #* #left shaping happened first & keep to complete open tube bindoff shaping on left for other bed
 				if posBedCondition(prevLeftN): #force it to bindoff on the neg bed
 					leftBindCt = abs(xferL)-1
 					leftBindN = prevLeftN+1
@@ -5701,13 +6153,14 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 			if shaping and (openSide[carrier] != 'both' or dir1 == '+' or xferL >= 0 or xferL < -2): #new #* #changed it so this will only happen *before* pass if pos first in case of 2 carriers for open dec, to prevent shaping from happening with both carriers are on same side #but just do it normally if increasing or if shaping by bindoff (bc will need carrier on left side for that) #TODO: if dir1 == '-', change to dir1 == '+' and posBed == negBed #? #TODO: if skipping this, make passLeftN prevLeftN (actually, also define leftMostN like rightMostN)
 				if addBorder and xferL > 0: toDrop = leftShaping(bedCarriers[posBed])
 				else: knitStacked = leftShaping(bedCarriers[posBed])
-			else: leftMostN = prevLeftN #^
+			elif dir1 != '+': leftMostN = prevLeftN #^
+
 			# if shaping: #new #*
 			# 	if addBorder and xferL > 0: toDrop = leftShaping()
 			# 	else: knitStacked = leftShaping()
 
-			# if prevRightN is not None and (dir1 == '+' or (dir1 == '-' and openDec and gauge == 2 and xferR < -2 and prevRightN % 2 != 0)): rightMostN = prevRightN #* #new used to be (dir1 == '+' and n2 > prevRightN)
-			if prevRightN is not None and ((dir1 == '+' and not doublePass1) or (dir1 == '-' and openDec and gauge == 2 and xferR < -2 and prevRightN % 2 != 0)): rightMostN = prevRightN #* #new used to be (dir1 == '+' and n2 > prevRightN)
+			# if prevRightN is not None and (dir1 == '+' or (dir1 == '-' and openShaping and gauge == 2 and xferR < -2 and prevRightN % 2 != 0)): rightMostN = prevRightN #* #new used to be (dir1 == '+' and n2 > prevRightN)
+			if prevRightN is not None and ((dir1 == '+' and not doublePass1) or (dir1 == '-' and openShaping and gauge == 2 and xferR < -2 and prevRightN % 2 != 0)): rightMostN = prevRightN #* #new used to be (dir1 == '+' and n2 > prevRightN)
 			else: rightMostN = n2
 
 
@@ -5798,20 +6251,56 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 											k.rollerAdvance(rollerAdvance)
 			#--- end plainKnitPos func ---#^
 
-
-			if posBed == 'f': #new #*#*#* #v
+			if posBed == 'f': #new
 				posPatterns = patternsF
 				posPatDetails = stitchPatDetailsF
 				posPatData = stitchPatDataF
+
+				# posColData = colorworkDataF
+				posColRows = colorworkRowsF
 			else:
 				posPatterns = patternsB
 				posPatDetails = stitchPatDetailsB
-				posPatData = stitchPatDataB #^
+				posPatData = stitchPatDataB
 
-			# if len(patternsF):
-			if len(posPatterns): #new #*
-				# passLeftN = n1
-				passLeftN = leftMostN #new #*#*#*
+				# posColData = colorworkDataB
+				posColRows = colorworkRowsB #^
+			
+			def fairisleKnitPos(leftN, rightN): # (passLeftN, passRightN)
+				if len(posColRows) and carrier in posColRows[r]:
+					newColRows = None
+
+					for colC, colNs in posColRows[r][carrier].items():
+						if colC[0] == '!': #no carrier assigned yet
+							if colorworkCs[carrier][int(colC[1:])][0] != '!': newColC = colorworkCs[carrier][int(colC[1:])] #already reassigned with neg fairisle
+							elif len(reusableCarriers):
+								newColC = reusableCarriers.pop()
+								print(f'\nWARNING: reusing carrier {newColC} for colorwork section.')
+							else: return False
+							# newColC = reusableCarriers.pop() #new #* #TODO: bring in carrier
+
+							newColRows = deepcopy(posColRows)
+							for colR, colS in enumerate(newColRows): #TODO: make this correspond with back bed new carrier
+								if carrier in colS:
+									if colC in colS[carrier]: newColRows[colR][carrier][newColC] = newColRows[colR][carrier].pop(colC)
+							
+							colorworkCs[carrier][colC] = newColC
+							colorworkTucks[posBed] = halfGaugeFairisle(k, r, [leftMostN, rightMostN], colNs, '+', posBed, newColC, colorworkTucks[posBed])
+							continue
+
+						# if colC == carrier and leftN < colNs[0]: plainKnitPos(leftN, colNs[0]-1) #new #*
+						
+						colorworkTucks[posBed] = halfGaugeFairisle(k, r, [leftMostN, rightMostN], colNs, '+', posBed, colC, colorworkTucks[posBed])
+
+						# if colC == carrier and rightN > colNs[-1]: plainKnitPos(colNs[-1]+1, rightN) #new #*
+
+					if newColRows is not None: replaceColorworkC(posColRows, newColRows)
+
+					return True
+				else: return False
+
+			if len(posPatterns):
+				passLeftN = leftMostN
 				passRightN = rightMostN
 
 				# for idx in list(patternsF.keys()):
@@ -5824,30 +6313,26 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if patLeftN > rightMostN: break #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 
 					if passLeftN < (patLeftN-1):
-						plainKnitPos(passLeftN, patLeftN-1) #new #*
-						# plainKnitFront(passLeftN, patLeftN-1)
+						if not fairisleKnitPos(passLeftN, patLeftN-1): plainKnitPos(passLeftN, patLeftN-1) #new #*
+						# plainKnitPos(passLeftN, patLeftN-1) #new #*
 
 					if patRightN > rightMostN: patNs[-1] = rightMostN #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 					
 					tuckDrop = []
 					plaitC = None
-					# if 'plaitC' in stitchPatDetailsF[idx].info:
-					# 	plaitC = stitchPatDetailsF[idx].info['plaitC']
-					# 	if (stitchPatDetailsF[idx].info['plaitC'] == None or r == workingRows[stitchPatDetailsF[idx].info['plaitC']][0]):
-					if 'plaitC' in posPatDetails[idx].info: #new #* #v
+
+					if 'plaitC' in posPatDetails[idx].info:
 						plaitC = posPatDetails[idx].info['plaitC']
-						if (posPatDetails[idx].info['plaitC'] == None or r == workingRows[posPatDetails[idx].info['plaitC']][0]): #^
+						if (posPatDetails[idx].info['plaitC'] == None or r == workingRows[posPatDetails[idx].info['plaitC']][0]):
 							if plaitC is None:
 								if len(reusableCarriers):
 									plaitC = reusableCarriers.pop()
-									# stitchPatDetailsF[idx].info['plaitC'] = plaitC
-									# print(f'\nat row {r}, a reusable carrier ({plaitC}) was just assigned to a plaiting section on the front bed.')
-									posPatDetails[idx].info['plaitC'] = plaitC #new #* #v
-									print(f'\nat row {r}, a reusable carrier ({plaitC}) was just assigned to a plaiting section on bed {posBed}.') #^
+
+									posPatDetails[idx].info['plaitC'] = plaitC
+									print(f'\nat row {r}, a reusable carrier ({plaitC}) was just assigned to a plaiting section on bed {posBed}.')
 									plaitInfo['assigned'] += 1
 									plaitInfo['carriers'].append(plaitC)
-									plaitInfo['lastRows'][plaitC] = len(posPatData)-1 - next((i for i, data in enumerate(reversed(posPatData)) if idx in data.keys()), 0) #new #*
-									# plaitInfo['lastRows'][plaitC] = len(stitchPatDataF)-1 - next((i for i, data in enumerate(reversed(stitchPatDataF)) if idx in data.keys()), 0)
+									plaitInfo['lastRows'][plaitC] = len(posPatData)-1 - next((i for i, data in enumerate(reversed(posPatData)) if idx in data.keys()), 0)
 
 									if plaitC in takenOutCarriers:
 										k.incarrier(plaitC)
@@ -5870,25 +6355,16 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							if posPatDetails[idx].info['plaitCside'] == 'l': tuckDrop = placeCarrier(k, leftN=patNs[0], rightN=None, carrierOpts=[plaitC], gauge=gauge)[0] #new #*
 							else: tuckDrop = placeCarrier(k, leftN=None, rightN=patNs[-1], carrierOpts=[plaitC], gauge=gauge)[0]
 
-					# if 'secureStartN' in stitchPatDetailsF[idx].args:
-					# 	if patNs[0] == n1 or (gauge == 2 and patNs[0] == n1+1): stitchPatDetailsF[idx].args['secureStartN'] = True
-					# 	else: stitchPatDetailsF[idx].args['secureStartN'] = False
-
-					# 	if patNs[-1] == rightMostN or (gauge == 2 and patNs[-1] == rightMostN-1): stitchPatDetailsF[idx].args['secureEndN'] = True
-					# 	else: stitchPatDetailsF[idx].args['secureEndN'] = False
-
-					if 'secureStartN' in posPatDetails[idx].args: #new #* #v
+					if 'secureStartN' in posPatDetails[idx].args:
 						if patNs[0] == n1 or (gauge == 2 and patNs[0] == n1+1): posPatDetails[idx].args['secureStartN'] = True
 						else: posPatDetails[idx].args['secureStartN'] = False
 
 						if patNs[-1] == rightMostN or (gauge == 2 and patNs[-1] == rightMostN-1): posPatDetails[idx].args['secureEndN'] = True
-						else: posPatDetails[idx].args['secureEndN'] = False #^
+						else: posPatDetails[idx].args['secureEndN'] = False
 
 					patPasses = 1
-					# if 'passes' in stitchPatDetailsF[idx].info and stitchPatDetailsF[idx].info['passes'] > 1: #if multiple passes per pass of jersey
-					# 	passCt = stitchPatDetailsF[idx].info['passes']
-					if 'passes' in posPatDetails[idx].info and posPatDetails[idx].info['passes'] > 1: #if multiple passes per pass of jersey #new #* #v
-						passCt = posPatDetails[idx].info['passes'] #^
+					if 'passes' in posPatDetails[idx].info and posPatDetails[idx].info['passes'] > 1: #if multiple passes per pass of jersey
+						passCt = posPatDetails[idx].info['passes']
 						patNeedles = []
 						if passCt % 2 == 1: #whole odd number (great!)
 							patPasses = passCt
@@ -5898,8 +6374,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							passCt1 = passCt + 1
 							passCt2 = passCt - 1
 
-							# if stitchPatDetailsF[idx].info['count'] % 2 == 0: currPassCt = passCt1
-							if posPatDetails[idx].info['count'] % 2 == 0: currPassCt = passCt1 #new #*
+							if posPatDetails[idx].info['count'] % 2 == 0: currPassCt = passCt1
 							else: currPassCt = passCt2
 							patPasses = currPassCt
 							for p in range(0, currPassCt):
@@ -5909,7 +6384,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					if placementLeft and patNs[0] < prevLeftN: #here things change
 						if type(patNeedles[0]) == list: patNeedles[0][0] = prevLeftN
 						else: patNeedles[0] = prevLeftN #have first (or only) pass start at prevLeftN
-						# placementLeft = False #done with it #remove
 
 					plaitCsInTheWay = [[carr, loc] for carr, loc in plaitInfo['carrierPark'].items() if loc >= patNs[0] and loc <= patNs[-1]]
 					if len(plaitCsInTheWay):
@@ -5924,7 +6398,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 								plaitInfo['carrierPark'][pC[0]] = patNs[0]-3
 						k.rollerAdvance(rollerAdvance)
 
-					k.comment(f'insert stitch pattern for bed {posBed} ({patPasses} pass count)') #new #* #v
+					k.comment(f'insert stitch pattern for bed {posBed} ({patPasses} pass count)')
 
 					if 'stitchNumber' in posPatDetails[idx].info: k.stitchNumber(posPatDetails[idx].info['stitchNumber'])
 
@@ -5934,7 +6408,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					
 					placementLeft = False
 					
-					if 'stitchNumber' in posPatDetails[idx].info: k.stitchNumber(stitchNumber) #reset it #^
+					if 'stitchNumber' in posPatDetails[idx].info: k.stitchNumber(stitchNumber) #reset it
 
 					if len(twistedStitches):
 						for n in range(patNs[0], patNs[-1]): #TODO: have this be possible for if stitch pattern length > 1
@@ -5950,13 +6424,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						for bn in tuckDrop:
 							k.drop(bn)
 						k.rollerAdvance(rollerAdvance)
-					
-					# if len(openTuckDrop): #new #v
-					# 	k.rollerAdvance(0)
-					# 	for bn in openTuckDrop:
-					# 		k.drop(bn)
-					# 	k.rollerAdvance(rollerAdvance)
-					# 	openTuckDrop = [] #new #^
 
 					if plaitC is not None and sectionCountChangeNext and (sectionCount < len(pieceMap[r+1])): # sectionCount < len(pieceMap[r+1]) means a *new* section is coming, rather than a section ending
 						k.comment(f'miss plaitC out of way of upcoming new section')
@@ -5971,21 +6438,13 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 					passLeftN = patRightN+1
 				
-				# if passRightN > passLeftN: plainKnitPos(passLeftN, passRightN) #new #*
-				if passRightN >= passLeftN: plainKnitPos(passLeftN, passRightN) 
+				# if passRightN >= passLeftN: plainKnitPos(passLeftN, passRightN)
+				if passRightN >= passLeftN:
+					if not fairisleKnitPos(passLeftN, passRightN): plainKnitPos(passLeftN, passRightN) #new #*
 			else:
-				# plainKnitFront(n1, n2) #?#?#?
-				plainKnitPos(leftMostN, rightMostN) #new #rightMostN #new #*
+				if not fairisleKnitPos(leftMostN, rightMostN): plainKnitPos(leftMostN, rightMostN) #new #*
+				# plainKnitPos(leftMostN, rightMostN) #new #rightMostN #new #*
 
-				# if len(openTuckDrop): #new #v
-				# 		k.rollerAdvance(0)
-				# 		for bn in openTuckDrop:
-				# 			k.drop(bn)
-				# 		k.rollerAdvance(rollerAdvance)
-				# 		openTuckDrop = [] #new #^
-
-			# for n in range(n1, n2 + 1):
-			# 	visualization[r].append(int(carrier))
 
 			if len(knitStacked):
 				for bn in knitStacked:
@@ -5998,7 +6457,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						k.knit('+', f'{posBed}{n}', bedCarriers[posBed])
 					elif n == prevRightN: k.miss('+', f'{posBed}{n}', bedCarriers[posBed]) #get carrier out of way
 					# if f'f{n}' not in emptyNeedles: k.knit('+', f'{posBed}{n}', bedCarriers[posBed]) #new #* #TODO: check with posBed & negBed
-				if bothOpenXtraC is not None and openDec and gauge == 2: k.miss('+', f'{posBed}{prevRightN+1}', bedCarriers[posBed]) #using different carrier for bindoff that's coming up and will tuck prevRightN+1, so miss past that too
+				if bothOpenXtraC is not None and openShaping and gauge == 2: k.miss('+', f'{posBed}{prevRightN+1}', bedCarriers[posBed]) #using different carrier for bindoff that's coming up and will tuck prevRightN+1, so miss past that too
 
 			# if shaping and openSide == 'both' and dir1 == '-' and xferL < 0 and xferL >= -2: #new #* #if skipped this before, do it now that carriers are on opposite sides
 			if shaping and openSide[carrier] == 'both' and dir1 == '-' and xferL < 0 and xferL >= -2: #new #* #if skipped this before, do it now that carriers are on opposite sides
@@ -6021,7 +6480,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				# 	if f'{negBed}{n}' not in emptyNeedles: k.knit('-', f'{negBed}{n}', bedCarriers[negBed]) #new #* #TODO: decide if this should be posBed or negBed 
 				# 	elif n == prevLeftN: k.miss('-', f'{negBed}{n}', bedCarriers[posBed]) #get carrier out of way
 				# 	# if f'f{n}' not in emptyNeedles: k.knit('+', f'{posBed}{n}', bedCarriers[posBed]) #new #* #TODO: check with posBed & negBed #^
-				if bothOpenXtraC is not None and openDec and gauge == 2: k.miss('-', f'{negBed}{prevLeftN-1}', bedCarriers[negBed]) #using different carrier for bindoff that's coming up and will tuck prevLeftN-1, so miss past that too #TODO: #remove #?
+				if bothOpenXtraC is not None and openShaping and gauge == 2: k.miss('-', f'{negBed}{prevLeftN-1}', bedCarriers[negBed]) #using different carrier for bindoff that's coming up and will tuck prevLeftN-1, so miss past that too #TODO: #remove #?
 					# if f'b{n}' not in emptyNeedles: k.knit('-', f'b{n}', carrier) #^
 
 		if placeXtraC and bothOpenXtraC['bed'] == posBed:
@@ -6034,11 +6493,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 		posBedPass()
 		if dir1 == '+':
-			# if doublePass1: posBedPass(False) #new #*#*#*
-
 			if placeXtraC and bothOpenXtraC['bed'] == negBed:
 				k.comment('place carrier with extra pass')
-				# resetBedCarriers = bedCarriers.copy()
 				posBed = negBed
 				posBedPass(False)
 				if negBed == 'f': posBed = 'b'
@@ -6049,7 +6505,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				k.comment('extra pass to prepare for open decreasing')
 				posBedPass(False) #new #*#*#*
 		else: #right shaping happened first
-			# if openDec and gauge == 2 and xferR < -2: #* #right shaping happened first & need to complete open tube bindoff shaping on right for other bed
+			# if openShaping and gauge == 2 and xferR < -2: #* #right shaping happened first & need to complete open tube bindoff shaping on right for other bed
 			if openDecSectR and gauge == 2 and xferR < -2: #* #right shaping happened first & need to complete open tube bindoff shaping on right for other bed
 				if negBedCondition(prevRightN): #force it to bindoff on the pos bed
 					rightBindCt = abs(xferR)-1
@@ -6071,9 +6527,9 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		# 		k.drop(t)
 		# 	k.rollerAdvance(rollerAdvance)
 
-		if len(placementPass): #if applicable, place middle section carrier by new left-most needle to get it out of the way for new left-most shortrow section in next row #TODO: check this with posBed and negBed
+		if len(placementPass) and placementPass[0] < placementPass[1]: #if applicable, place middle section carrier by new left-most needle to get it out of the way for new left-most shortrow section in next row #TODO: check this with posBed and negBed
 			for n in range(placementPass[0], placementPass[1]+1):
-				if f'b{n}' not in emptyNeedles: k.knit('+', f'b{n}', bedCarriers['b']) #TODO: see if this interferes with openDec
+				if f'b{n}' not in emptyNeedles: k.knit('+', f'b{n}', bedCarriers['b']) #TODO: see if this interferes with openShaping
 			k.miss('+', f'b{placementPass[1]+1}', bedCarriers['b'])
 
 		for bn in twistedStitches:
@@ -6160,13 +6616,13 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					outCarriers.extend(takeOutAtEnd)
 					outCarriers = list(set(outCarriers)) #ensure no duplicates
 				else:
-					if (plaitInfo['count'] == plaitInfo['assigned']) and (leftDropWasteC is not None or rightDropWasteC is not None) and (not openDec or not rightDec or not leftDec): #new #check #TODO: change this to work with openDecSect #*#*#*
+					if (plaitInfo['count'] == plaitInfo['assigned']) and (leftDropWasteC is not None or rightDropWasteC is not None) and (not openShaping or not rightDec or not leftDec): #new #check #TODO: change this to work with openDecSect #*#*#*
 						outCarriers.append(bedCarriers[negBed])
 						if bedCarriers[negBed] in takeOutAtEnd: takeOutAtEnd.remove(bedCarriers[negBed])
 						if bedCarriers[posBed] != bedCarriers[negBed]: 
 							outCarriers.append(bedCarriers[posBed])
 							if bedCarriers[posBed] in takeOutAtEnd: takeOutAtEnd.remove(bedCarriers[posBed])
-					else: #might need the carrier for plaiting or openDec for both beds
+					else: #might need the carrier for plaiting or openShaping for both beds
 						if plaitInfo['count'] != plaitInfo['assigned']: print(f'\nat row {r}, a carrier that was being used in the main piece ({carrier}) just became available, which we needed for a plaiting section!')
 						else: print(f'\nat row {r}, a carrier that was being used in the main piece ({carrier}) just became available, which we needed for the drop waste border!')
 						# reusableCarriers.append(carrier)

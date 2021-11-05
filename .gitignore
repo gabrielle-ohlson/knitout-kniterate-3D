@@ -19,11 +19,19 @@ scripts/*
 
 # ignore all user-created graphics, but...
 graphics/*
+!/graphics/stitch-patterns/
+# graphics/stitch-patterns/*
 
 # (keep demo/example/debug graphics)
 !/graphics/*-demo.png
 !/graphics/*-example.png
 !/graphics/*-debug.png
+
+# !/graphics/stitch-patterns/
+graphics/stitch-patterns/*
+!/graphics/stitch-patterns/*-demo.png
+!/graphics/stitch-patterns/*-example.png
+!/graphics/stitch-patterns/*-debug.png
 
 # Distribution / packaging
 build/
