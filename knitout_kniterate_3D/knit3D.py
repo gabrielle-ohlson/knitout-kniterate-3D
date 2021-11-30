@@ -10,12 +10,12 @@ from PIL import Image, ImageColor
 
 #NOTE: for gauge > 1: decided baseBed should consistently be front so as to make things less complicated (because doesn't really matter) --- so translation would be fn -> f(gauge*n) bn -> b((gauge*n)+1)
 
-#TODO: maybe fix things so if -> f then b and if <- 
 #---------------------------------------------
 #--- CUSTOMIZABLE VARIABLES FOR EXTENSIONS ---
 #---------------------------------------------
 #for waste section
 wasteSpeedNumber = 400
+wasteStitchNumber = 4
 
 #for main section
 speedNumber = 300
@@ -69,16 +69,25 @@ def colorDistance(rgb1, rgb2, returnRGBs=False):
 	else: return d
 
 
-def setSettings(speed=None, stitch=None, roller=None, xferSpeed=None, xferStitch=None, xferRoller=None, splitSpeed=None, splitStitch=None, splitRoller=None, wasteSpeed=None):
+def setSettings(k=None, speed=None, stitch=None, roller=None, xferSpeed=None, xferStitch=None, xferRoller=None, splitSpeed=None, splitStitch=None, splitRoller=None, wasteSpeed=None, wasteStitch=None):
 	'''
 	*TODO
 	'''
-	if speed is not None: globals()['speedNumber'] = speed
-	if stitch is not None: globals()['stitchNumber'] = stitch
-	if roller is not None: globals()['rollerAdvance'] = roller
+	if speed is not None:
+		globals()['speedNumber'] = speed
+		if k is not None: k.speedNumber(speed)
+	if stitch is not None:
+		globals()['stitchNumber'] = stitch
+		if k is not None: k.stitchNumber(stitch)
+
+	if roller is not None:
+		globals()['rollerAdvance'] = roller
+		if k is not None: k.rollerAdvance(roller)
 
 	if xferSpeed is not None: globals()['xferSpeedNumber'] = xferSpeed
-	if xferStitch is not None: globals()['xferStitchNumber'] = xferStitch
+	if xferStitch is not None:
+		globals()['xferStitchNumber'] = xferStitch
+		if k is not None: k.xferStitchNumber(xferStitch) #only xfer setting with dedicated extension
 	if xferRoller is not None: globals()['xferRollerAdvance'] = xferRoller
 
 	if splitSpeed is not None: globals()['splitSpeedNumber'] = splitSpeed
@@ -86,9 +95,10 @@ def setSettings(speed=None, stitch=None, roller=None, xferSpeed=None, xferStitch
 	if splitRoller is not None: globals()['splitRollerAdvance'] = splitRoller
 
 	if wasteSpeed is not None: globals()['wasteSpeedNumber'] = wasteSpeed
+	if wasteStitch is not None: globals()['wasteStitchNumber'] = wasteStitch
 
 
-def defaultSettings():
+def defaultSettings(k=None):
 	#for main section 
 	globals()['speedNumber'] = 300
 	globals()['stitchNumber'] = 4
@@ -106,6 +116,12 @@ def defaultSettings():
 
 	#for waste section
 	globals()['wasteSpeedNumber'] = 400
+
+	if k is not None:
+		k.speedNumber(speedNumber)
+		k.stitchNumber(stitchNumber)
+		k.rollerAdvance(rollerAdvance)
+		k.xferStitchNumber(xferStitchNumber)
 
 
 def xferSettings(k, alterations={}):
@@ -560,7 +576,7 @@ def circular(k, startN, endN, length, c, gauge=1):
 				elif n == leftN: k.miss('-', f'b{n}', c)
 
 
-def garter(k, startN, endN, length, c, patternRows=1, startBed='f', currentBed=None, originBed=None, homeBed=None, secureStartN=True, secureEndN=True, gauge=1): 
+def garter(k, startN, endN, length, c, patternRows=1, startBed='f', currentBed=None, originBed=None, homeBed=None, secureStartN=True, secureEndN=True, gauge=1):  #TODO: add seed!
 	'''
 	*k is knitout Writer
 	*startN is the starting needle to knit on
@@ -940,7 +956,7 @@ def rib(k, startN, endN, length, c, currentBed='f', originBed=None, homeBed=None
 	k.comment('end rib')
 
 
-def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], side='l', patterns=[], defaultLength=None, wasteDivider=False, wasteLength=36):
+def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], side='l', patterns=[], defaultLength=None, wasteDivider=False, wasteLength=42):
 	'''
 	Knits a half-gauge tube in the stitch pattern[s] indicated in the `patterns` arg.
 	
@@ -972,6 +988,9 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 	 * wasteDivider (bool, optional): indicates whether or not the stitch pattern tubes should be separated by waste sections with a draw thread in the middle. Defaults to False.  
 	 * wasteLength (int, optional): the total length of any waste sections.
 	'''
+
+	defaultExtensions = {'speed': speedNumber, 'stitch': stitchNumber, 'roller': rollerAdvance, 'xferSpeed': xferSpeedNumber, 'xferStitch': xferStitchNumber, 'xferRoller': xferRollerAdvance, 'splitSpeed': splitSpeedNumber, 'splitStitch': splitStitchNumber, 'splitRoller': splitRollerAdvance, 'wasteSpeed': wasteSpeedNumber, 'wasteStitch': wasteStitchNumber} #in case changed
+
 	if wasteC is None: wasteDivider = False #just in case the user made a mistake
 
 	gauge = 2
@@ -1058,10 +1077,7 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 			if 'stitchNumber' in info['extensions']: tubeStitch = info['extensions']['stitchNumber']
 			if 'rollerAdvance' in info['extensions']: tubeRoller = info['extensions']['rollerAdvance']
 			
-			setSettings(speed=tubeSpeed, stitch=tubeStitch, roller=tubeRoller)
-			# if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
-			# if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
-			# if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
+			setSettings(k=k, speed=tubeSpeed, stitch=tubeStitch, roller=tubeRoller)
 
 		if len(info): details = ' ' + str(info)
 		else: details = ''
@@ -1230,11 +1246,10 @@ def stitchPatternTube(k, leftN, rightN, c, wasteC='1', drawC='2', featureCs=[], 
 				
 				stitchPatFunc(k, length=(0.5 if pattern == 'interlock' else 1), c=c, **currArgs)
 			
-			if 'extensions' in info: defaultSettings() #reset to defaults
-			# if 'extensions' in info: #reset
-			# 	if 'stitchNumber' in info['extensions']: k.stitchNumber(info['extensions']['stitchNumber'])
-			# 	if 'rollerAdvance' in info['extensions']: k.rollerAdvance(info['extensions']['rollerAdvance'])
-			# 	if 'speedNumber' in info['extensions']: k.speedNumber(info['extensions']['speedNumber'])
+		# if 'extensions' in info: defaultSettings(k) #reset to defaults
+		if 'extensions' in info:
+			setSettings(k=k, speed=defaultExtensions['speed'], stitch=defaultExtensions['stitch'], roller=defaultExtensions['roller'], xferSpeed=defaultExtensions['xferSpeed'], xferStitch=defaultExtensions['xferStitch'], xferRoller=defaultExtensions['xferRoller'], splitSpeed=defaultExtensions['splitSpeed'], splitStitch=defaultExtensions['splitStitch'], splitRoller=defaultExtensions['splitRoller'], wasteSpeed=defaultExtensions['wasteSpeed'], wasteStitch=defaultExtensions['wasteStitch'])
+
 
 	print('\nDone.')
 
@@ -1973,6 +1988,7 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 
 	k.comment('waste section')
 	k.speedNumber(wasteSpeedNumber)
+	k.stitchNumber(wasteStitchNumber)
 
 	if drawMiddle: interlockLength //= 2
 
@@ -1980,18 +1996,49 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 	else: drawSide = 'l'
 
 	if wasteC in endOnRight: #TODO: add extra pass if wasteC == drawC and closedCaston == True
-		interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
+		if initial and interlockLength > 24:
+			interlock(k, rightN, leftN, 24, wasteC, gauge)
+			k.pause('cut yarns')
+			interlock(k, rightN, leftN, interlockLength-24, wasteC, gauge)
+		else: interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
 		if drawMiddle:
 			if drawC is not None: drawThread(k, leftN, rightN, drawC, side=drawSide, circular=True, missDraw=missDraw, gauge=gauge) #new
-			interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
-		else: circular(k, rightN, leftN, 8, wasteC, gauge)
+			# if initial and interlockLength > 12:
+			if initial and interlockLength > 12:
+				if interlockLength < 24:
+					pauseAfter = 24-interlockLength
+					interlock(k, rightN, leftN, pauseAfter, wasteC, gauge) # 20 32 (16) #12 interlockLength-8 # 12
+					k.pause('cut yarns')
+					interlock(k, rightN, leftN, interlockLength-pauseAfter, wasteC, gauge) # 8 interlockL 20- (32-20) 20-32 + 20+20
+				else: interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
+			else:
+				interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
+				if initial: k.pause('cut yarns')
+		else:
+			if initial: k.pause('cut yarns')
+			circular(k, rightN, leftN, 8, wasteC, gauge)
 		if missWaste is not None: k.miss('+', f'f{missWaste}', wasteC)
 	else:
-		interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
+		if initial and interlockLength > 24:
+			interlock(k, leftN, rightN, 24, wasteC, gauge)
+			k.pause('cut yarns')
+			interlock(k, leftN, rightN, interlockLength-24, wasteC, gauge)
+		else: interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
 		if drawMiddle:
 			if drawC is not None: drawThread(k, leftN, rightN, drawC, side=drawSide, circular=True, missDraw=missDraw, gauge=gauge) #new
-			interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
-		else: circular(k, leftN, rightN, 8, wasteC, gauge)
+			if initial and interlockLength > 12:
+				if interlockLength < 24:
+					pauseAfter = 24-interlockLength
+					interlock(k, leftN, rightN, pauseAfter, wasteC, gauge) # 20 32 (16) #12 interlockLength-8 # 12
+					k.pause('cut yarns')
+					interlock(k, leftN, rightN, interlockLength-pauseAfter, wasteC, gauge) # 8 interlockL 20- (32-20) 20-32 + 20+20
+				else: interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
+			else:
+				interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
+				if initial: k.pause('cut yarns')
+		else:
+			if initial: k.pause('cut yarns')
+			circular(k, leftN, rightN, 8, wasteC, gauge)
 		if missWaste is not None: k.miss('-', f'f{missWaste}', wasteC)
 
 	if closedCaston and not drawMiddle:
@@ -2000,6 +2047,7 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 
 	if not drawMiddle and drawC is not None: drawThread(k, leftN, rightN, drawC, side=drawSide, circular=(not closedCaston), missDraw=missDraw, gauge=gauge) #new
 
+	resetSettings(k)
 	return carrierLocations
 
 

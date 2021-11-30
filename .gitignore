@@ -27,7 +27,6 @@ graphics/*
 !/graphics/*-example.png
 !/graphics/*-debug.png
 
-# !/graphics/stitch-patterns/
 graphics/stitch-patterns/*
 !/graphics/stitch-patterns/*-demo.png
 !/graphics/stitch-patterns/*-example.png

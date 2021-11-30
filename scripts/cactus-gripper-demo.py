@@ -3,8 +3,12 @@ from knitout_kniterate_3D import knit3D, knitout
 
 k = knitout.Writer('1 2 3 4 5 6')
 
+import os
+
+working_dir = os.getcwd() #TODO: add to main knit3D
+
 fileName = 'cactus-gripper-demo'
-imagePath = '../graphics/cactus-gripper-demo.png'
+imagePath = working_dir + '/../graphics/cactus-gripper-demo.png'
 
 stitchPatImgPathF = '../graphics/stitch-patterns/cactus-gripper-st-demo.png'
 
@@ -24,3 +28,10 @@ knit3D.shapeImgToKnitout(k, imagePath=imagePath, gauge=2, maxShortrowCount=4, ad
 
 
 k.write(f'{fileName}.k')
+
+
+'''
+import os
+
+working_dir = os.getcwd()
+'''
