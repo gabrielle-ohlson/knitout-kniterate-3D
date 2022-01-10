@@ -1,5 +1,5 @@
-# from lib import knitout, knit3D
-from knitout_kniterate_3D import knit3D, knitout
+from lib import knitout, knit3D
+# from knitout_kniterate_3D import knit3D, knitout
 import os
 
 k = knitout.Writer('1 2 3 4 5 6')
@@ -7,10 +7,10 @@ cur_WD=os.getcwd()
 
 
 fileName = 'walkerH_v1_2-1'
-imagePath = cur_WD+ '/graphics/Walker_v1/WalkerH-v1-BW.png'
+imagePath = '../graphics/WalkerH-v1-BW-debug.png'
 
 
-stitchPatImgPathF = cur_WD+ '/graphics/Walker_v1/WalkerH-v1-colors.png'
+stitchPatImgPathF = '../graphics/WalkerH-v1-colors-debug.png'
 
 stitchPatternsF = {'garter': ['blue','red','green','yellow']}
 
@@ -18,7 +18,7 @@ colorArgsF = {'red': {'patternRows': 4, 'passes': 2},'blue': {'patternRows': 4, 
     'green': {'patternRows': 4, 'passes': 2},'yellow': {'patternRows': 4, 'passes': 2}} #need to revisit- what does this mean
 
 
-stitchPatImgPathB = cur_WD + '/graphics/Walker_v1/WalkerH-v1-colors.png'
+stitchPatImgPathB = '../graphics/WalkerH-v1-colors-debug.png'
 
 stitchPatternsB = {'garter': ['blue','red','green','yellow']}
 
