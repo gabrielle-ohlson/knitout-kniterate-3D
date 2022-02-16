@@ -4243,7 +4243,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 		taken = [] #not sure if this is really needed, but it's just an extra step to absolutely ensure two sections in one row don't used same carrier
 
-		colRowMapF, colRowMapB = {}, {} #new
+		colRowMapF, colRowMapB = {}, {}
 		#loop through sections in row
 		for i in reversed(range(0, len(rows[r]))): #go backwards so new carriers are added on left
 			leftN = rows[r][i][0] #detect the left and right-most needle in each section for that row
@@ -4390,6 +4390,10 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if len(colSectB): colRowMapB[carrierOrder[unusedC]] = colSectB
 
 				rowMap = {**newRowSection, **rowMap} #add new section to beginning of rowMap since looping in reverse
+
+		if r > 0 and len(taken) < len(pieceMap[-1]):
+			for s in range(0, carrierCount):
+				if s not in taken: sections[s].leftN, sections[s].rightN = None, None #reuse the carrier
 
 		pieceMap.append(rowMap)
 
@@ -4884,14 +4888,12 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	cycleEnd = maxShortrowCount
 	endPoints = []
 
-	# switchDir = None #new#*#* #v #TODO: change
 	switchDir = {} #TODO: have this reset when carrier is reassigned #*#*#*
 	openSide = {}
-	# openSide = None
 	bothOpenXtraC = None #^
 
 	for car in carrierOrder:
-		switchDir[car] = None #new#*#*
+		switchDir[car] = None
 		openSide[car] = None
 
 	global toDrop #?
@@ -4939,8 +4941,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 		k.comment(f'row: {r} (section {sectionIdx+1}/{sectionCount})')
 
-		if carrier in rightCarriers: dir1 = '-' #right side
-		else: dir1 = '+' #left side
+		if carrier in rightCarriers: dir1, dir2 = '-', '+' #right side
+		else: dir1, dir2 = '+', '-' #left side
 
 		prevLeftN = None
 		prevRightN = None
@@ -4998,6 +5000,25 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				print(f'\nNOTE: at row {r}, not finishing off carrier {carrier}, even though its section is finished, because some (or all) of the loops will be taken over by another carrier.')
 
 		if r > 0 and carrier not in pieceMap[r-1]: #means this is a new section #might need to cast some needles on
+			print(f'new section at row {r}, using carrier {carrier}.')
+
+			tuckDrop = []
+
+			if lastLineC is not None and lastLineC['bn1']['needle'] is not None: #see if we need to place the carrier or change direction
+				lastN = lastLineC['bn1']['needle']
+				print(lastN)
+				dist_from_n1, dist_from_n2 = abs(lastN-n1), abs(lastN-n2)
+
+				min_dist = min(dist_from_n1, dist_from_n2)
+
+				if dist_from_n1 != dist_from_n2:
+					if (dir1 == '-' and min_dist == dist_from_n1) or (dir1 == '+' and min_dist == dist_from_n2):
+						print('changing dir1 for new carrier.')
+						dir1, dir2 = dir2, dir1
+				
+				if min_dist > 4:
+					tuckDrop = placeCarrier(k, leftN=(n1 if dir1 == '+' else None), rightN=(n2 if dir1 == '-' else None), carrierOpts=[carrier], gauge=gauge)[0]
+
 			if sectionIdx != 0 and sectionIdx != len(mapKeys)-1: #means that it is a new shortrow section that is not on the edge, so need to place carrier in correct spot
 				if dir1 == '+': k.miss('+', f'f{n1-1}', carrier)
 				else: k.miss('-', f'f{n2+1}', carrier)
@@ -5014,6 +5035,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if n not in prevRowNeedles: newNeedles.append(n)
 			
 			if len(newNeedles):
+				k.comment('cast-on new needles')
+
 				if openShaping: #TODO: make this based on img too!
 					openTubeCaston(k, startN=newNeedles[0], endN=newNeedles[-1], c=carrier, gauge=2) #TODO: make sure this doesn't cause issues if new needles attached to existing section
 				else:
@@ -5035,7 +5058,13 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir2, f'b{newNeedles[n]}', carrier)
 			else:
 				prevLeftN = prevRowNeedles[0]
-				if prevLeftN < n1: xferL = prevLeftN - n1 #new
+				if prevLeftN < n1: xferL = prevLeftN - n1
+			
+			if len(tuckDrop):
+				k.rollerAdvance(0)
+				for bn in tuckDrop:
+					k.drop(bn)
+				k.rollerAdvance(rollerAdvance)
 
 		if r < len(pieceMap)-1 and len(pieceMap[r+1]) > sectionCount and carrier in pieceMap[r+1]:
 			futureMapKeys = list(pieceMap[r+1].keys())
@@ -5047,7 +5076,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		if r > 0 and carrier in pieceMap[r-1]:
 			prevLeftN, prevRightN = convertGauge(gauge, pieceMap[r-1][carrier][0], pieceMap[r-1][carrier][-1])
 			prevNeedles[carrier] = [prevLeftN, prevRightN]
-			# prevLeftN, prevRightN = convertGauge(gauge, prevNeedles[carrier][0], prevNeedles[carrier][len(prevNeedles)-1])
 
 			if sectionCount > len(pieceMap[r-1]): #means new section here
 				prevMapKeys = list(pieceMap[r-1].keys())
@@ -5089,9 +5117,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						#TODO: check if need to add if n2 >= finishedLeftN
 						if n2 > finishedRightN and n1 < finishedRightN: incMid = True #increasing in middle
 		
-		#*#*#* #new #v
-		doublePass1 = False #new
-		placeXtraC = False #new
+		doublePass1 = False
+		placeXtraC = False
 
 		openDecSectL, openDecSectR = False, False
 		if openShaping and gauge == 2:
@@ -5229,7 +5256,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		if len(takenNeedles):
 			if sectionIdx < len(takenNeedles): takenNeedles[sectionIdx] = range(n1, n2+1) #new #alter so based on inc/dec if adding border for tuck-over-split
 			else: takenNeedles.append(range(n1, n2+1))
-		#^
 
 		bedCarriers = {'f': carrier, 'b': carrier} #default
 		# if switchDir:
@@ -5244,7 +5270,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 			negBedCondition = lambda n: (n % gauge != 0 or gauge == 1)
 			posBedCondition = lambda n: (n % gauge == 0)
 		
-		if bothOpenXtraC is not None: bedCarriers[bothOpenXtraC['bed']] = bothOpenXtraC['carrier'] #new
+		if bothOpenXtraC is not None: bedCarriers[bothOpenXtraC['bed']] = bothOpenXtraC['carrier']
 
 
 		def leftShaping(leftC): #called from posBedPass func and happens *before* pos pass #v
