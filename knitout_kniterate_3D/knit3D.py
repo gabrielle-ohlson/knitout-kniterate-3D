@@ -5001,12 +5001,13 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 		if r > 0 and carrier not in pieceMap[r-1]: #means this is a new section #might need to cast some needles on
 			print(f'new section at row {r}, using carrier {carrier}.')
+			lastLineC = k.returnLastOp(carrier=carrier, asDict=True)
 
 			tuckDrop = []
 
 			if lastLineC is not None and lastLineC['bn1']['needle'] is not None: #see if we need to place the carrier or change direction
 				lastN = lastLineC['bn1']['needle']
-				print(lastN)
+
 				dist_from_n1, dist_from_n2 = abs(lastN-n1), abs(lastN-n2)
 
 				min_dist = min(dist_from_n1, dist_from_n2)
