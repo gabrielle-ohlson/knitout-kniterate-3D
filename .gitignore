@@ -36,3 +36,5 @@ graphics/stitch-patterns/*
 build/
 dist/
 *.egg-info/
+
+pypi_instructions.md

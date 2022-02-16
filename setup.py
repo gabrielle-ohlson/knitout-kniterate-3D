@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
 	name="knitout_kniterate_3D",
-	version="1.0.1",
+	version="1.0.2",
 	author="Gabrielle Ohlson",
 	author_email="gmoa2017@mymail.pomona.edu",
 	description="Code for producing knitout files to do 3D knitting on the kniterate knitting machine (and also optionally adding stitch patterns along the 3D surface).",
