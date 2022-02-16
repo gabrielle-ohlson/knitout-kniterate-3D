@@ -3569,10 +3569,11 @@ def insertStitchPattern(k, stitchPat, needles, passEdgeNs, bed, side='l', c='1')
 		postFuncUpdate(result, {})
 
 class StitchPatDetails:
-	def __init__(self, pattern, args, info):
+	def __init__(self, pattern, args, info, color):
 		self.pattern = pattern
 		self.args = args
 		self.info = info
+		self.color = color
 
 
 def genericUpdate(self, returns):
@@ -3670,7 +3671,7 @@ def getStitchData(k, bed, shapeData, imagePath='graphics/stitch-pat-map.png', st
 							if 'rollerAdvance' in patArgs[arg]: info['rollerAdvance'] = patArgs[arg]['rollerAdvance']
 							if 'speedNumber' in patArgs[arg]: info['speedNumber'] = patArgs[arg]['speedNumber']
 
-				pat = StitchPatDetails(pattern, args, info)
+				pat = StitchPatDetails(pattern, args, info, col) #new col
 
 				if pat.pattern == 'garter': pat.update = garterUpdate.__get__(pat)
 				elif pat.pattern == 'rib': pat.update = ribUpdate.__get__(pat)
@@ -3695,7 +3696,7 @@ def getStitchData(k, bed, shapeData, imagePath='graphics/stitch-pat-map.png', st
 								if bed == 'b': info['plaitCside'] = 'r'
 								else: info['plaitCside'] = 'l'
 
-			pat = StitchPatDetails(pattern, args, info)
+			pat = StitchPatDetails(pattern, args, info, color) #new color
 
 			if pat.pattern == 'garter': pat.update = garterUpdate.__get__(pat)
 			elif pat.pattern == 'rib': pat.update = ribUpdate.__get__(pat)
@@ -3770,6 +3771,14 @@ def imgToStitchPatternMap(k, imgData, stitchPatColors, stitchPatCount):
 		elif type(color) == tuple and len(color) == 3: palData.append(color)
 		else: raise ValueError(f"color values in stitchPatterns must be either a color name in string form e.g. 'red', or rgb tuple e.g. (255, 0, 0). Value: {color} is not valid.")
 
+	# im_arr = np.array(imgData)
+	# stitchPatColors_arr = np.asarray(stitchPatColors)
+	# unique_colors = np.unique(im_arr.reshape(-1, im_arr.shape[-1]), axis=0)
+	# intersection = np.array([x for x in set(tuple(x) for x in stitchPatColors_arr) & set(tuple(x) for x in unique_colors)])
+	# set_difference = set(tuple(x) for x in stitchPatColors_arr).difference(tuple(x) for x in unique_colors)
+	# print(unique_colors.shape, stitchPatColors_arr.shape, intersection.shape)
+	# print('set_difference:', set_difference)
+
 	palData.extend([(255, 255, 255)]*(256-len(palData)))
 	palData = sum([list(x) for x in palData], [])
 
@@ -3781,10 +3790,22 @@ def imgToStitchPatternMap(k, imgData, stitchPatColors, stitchPatCount):
 
 	palette = imgData.getcolors()
 
-	# imgData.show() #remove
+	quantized_colors = [x for count, x in imgData.convert('RGB').getcolors()]
 
-	if len(palette) == stitchPatCount: bg = None #no bg
-	else: bg = len(palette)-1 #key for background color (white)
+	bg_RGB = next((x for x in quantized_colors if x not in stitchPatColors), None)
+
+	excluded_stitch_pats = list(filter((lambda x: x not in quantized_colors), stitchPatColors))
+
+	if len(excluded_stitch_pats):
+		print(f'\nWARNING: the following stitch pattern colors have been excluded: {excluded_stitch_pats}')
+		# palette = [(count, idx) for idx, (count, key) in enumerate(palette)]
+		# stitchPatDetails = [patDet for patDet in stitchPatDetails if patDet.color not in excluded_stitch_pats]
+
+	if bg_RGB is not None: bg = palette[-1][1] #key for background color (white)
+	else: bg = None #no bg
+
+	# if len(palette) == stitchPatCount: bg = None #no bg
+	# else: bg = len(palette)-1 #key for background color (white)
 
 	rows = []
 	for r in range(0, imgHeight):
@@ -3902,6 +3923,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 	
 	if rawStDataF is not None:
 		stitchPatDataF = imgToStitchPatternMap(k, imgData=rawStDataF, stitchPatColors=stitchPatColorsF, stitchPatCount=len(stitchPatDetailsF))
+		# stitchPatDataF, stitchPatDetailsF = imgToStitchPatternMap(k, imgData=rawStDataF, stitchPatColors=stitchPatColorsF, stitchPatDetails=stitchPatDetailsF) # stitchPatDetailsF might get altered if a color isn't detected
 
 		for idx, stDeets in enumerate(stitchPatDetailsF):
 			if 'plaitC' in stDeets.info:
@@ -3912,6 +3934,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		
 	if rawStDataB is not None:
 		stitchPatDataB = imgToStitchPatternMap(k, imgData=rawStDataB, stitchPatColors=stitchPatColorsB, stitchPatCount=len(stitchPatDetailsB))
+		# stitchPatDataB, stitchPatDetailsB = imgToStitchPatternMap(k, imgData=rawStDataB, stitchPatColors=stitchPatColorsB, stitchPatDetails=stitchPatDetailsB)
 
 		for idx, stDeets in enumerate(stitchPatDetailsB):
 			if 'plaitC' in stDeets.info:
@@ -4000,7 +4023,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 	castonLeftN = None
 	castonRightN = None
-	startDrop = [] #new
+	startDrop = []
 
 	imgHeight = imgData.height
 	imgWidth = imgData.width
@@ -4030,14 +4053,12 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if x == imgWidth - 1:
 					row.append(section)
 
-					if r == 0 and castonLeftN is None: #new
+					if r == 0 and castonLeftN is None:
 							castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[-1][len(row[-1])-1])
 							if len(row) > 1: #multiple sections at the beginning
 								for s in range(0, len(row)-1): # -1 so don't do last section
 									sectEnd, sectStart = convertGauge(gauge, row[s][-1], row[s+1][0])
 									startDrop.append([sectEnd+1, sectStart-1])
-
-					# if r == 0 and castonLeftN is None: castonLeftN, castonRightN = convertGauge(gauge, row[0][0], row[0][len(row[0])-1]) #remove
 
 					if len(row) > carrierCount: carrierCount = len(row)
 
@@ -4953,7 +4974,9 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						else: overlap.append(n2)
 						patterns[pat] = overlap
 			
-			return patterns
+			sorted_patterns = dict(sorted(patterns.items(), key=lambda item: item[1][0]))
+
+			return sorted_patterns
 		#--- end findPatterns func ---#^
 
 
@@ -5157,7 +5180,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				rightCarriers.append(carrier)
 				doublePass1 = True
 
-		dropBorderKnits = (r==lastWasteWeightRow)
+		if addBorder: dropBorderKnits = (r==lastWasteWeightRow)
 
 		if addBorder and sectionIdx == 0 and r in wKeys: #first section of the row
 			k.comment(f'insert border for row {r}') #remove #?
@@ -5515,7 +5538,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				negPatData = stitchPatDataF
 				
 				negColRows = colorworkRowsF
-			
+						
 			def fairisleKnitNeg(leftN, rightN): # (passLeftN, passRightN) if len(colRowMapF): colorworkRowsF.append(colRowMapF)
 				if len(negColRows) and carrier in negColRows[r]:
 					newColRows = None
@@ -5558,6 +5581,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					patNs = negPatterns[idx].copy()
 					patLeftN = patNs[0]
 					patRightN = patNs[-1]
+
+					if gauge==2 and patRightN-patLeftN==0 and ((negBed=='f' and patLeftN%2!=0) or (negBed=='b' and patLeftN%2==0)): continue #if only includes one needle and won't knit, skip it
 
 					if patRightN < leftMostN: break #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 
@@ -5872,6 +5897,8 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					patNs = posPatterns[idx].copy()
 					patLeftN = patNs[0]
 					patRightN = patNs[-1]
+
+					if gauge==2 and patRightN-patLeftN==0 and ((posBed=='f' and patLeftN%2!=0) or (posBed=='b' and patLeftN%2==0)): continue #if only includes one needle and won't knit, skip it
 
 					if patLeftN > rightMostN: break #don't add the knits if increasing, since they will be added anyway thru increasing # and xferR > 0
 
