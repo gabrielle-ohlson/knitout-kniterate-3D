@@ -1529,6 +1529,8 @@ def wasteBorder(k, startN, endN, rows, c, gauge, offLimits, lastTime, justTuck=F
 		offLimits = [[n for n in nRange if n <= startN and n >= endN] for nRange in offLimits] # remove irrelevant needles
 		offLimits = [nRange for nRange in offLimits if nRange != []] # remove empty lists
 
+		# if startN == 207 and endN == -8: print('!!', offLimits) #remove #debug #beep
+
 		interlockStartN = startN #rightMostBorderN+borderWidthAdd
 
 		for i in range(len(offLimits)-1, -2, -1):
@@ -1538,7 +1540,8 @@ def wasteBorder(k, startN, endN, rows, c, gauge, offLimits, lastTime, justTuck=F
 			if interlockEndN < endN: interlockEndN = endN #new #*
 
 			if interlockStartN < interlockEndN: interlockStartN = interlockEndN #new #check
-			# if interlockStartN < interlockEndN: break
+
+			# if startN == 207 and endN == -8: print('!!', interlockEndN, interlockStartN, i) #remove #debug #beep
 
 			tuckStartN = interlockEndN-1
 			tuckEndN = offLimits[i][0]
@@ -2007,6 +2010,7 @@ def bindoff(k, count, xferNeedle, c, side='l', doubleBed=True, asDecMethod=False
 	*TODO
 	'''
 	if not asDecMethod: k.comment('bindoff')
+	else: k.comment('dec by bindoff')
 
 	def posLoop(op=None, bed=None): #v
 		for x in range(xferNeedle, xferNeedle+count):
@@ -2708,11 +2712,14 @@ def shapeXferDoubleBedHalfGauge(k, xferType, count, edgeNeedle, side='l', c=None
 					return [f'{bed2}{needle1-3}', f'{bed1}{needle2-3}', f'{bed1}{needle2-5}'], [f'{bed2}{needle1-3}']	#stacked and twisted
 	# else: print('TODO')
 	else:
-		# bindNeedle = edgeNeedle
+		# print(f'TODO: add support for decreasing by {count}.')
+		print(f'decreasing by bindoff, since count of {count} is greater than 4.')
 
-		# bindoff(k, count, bindNeedle, c, side, True, True)
-		# return [], []
-		print('TODO')
+		bindNeedle = edgeNeedle
+
+		bindoff(k, count, bindNeedle, c, side, True, True)
+		return [], []
+		
 	
 
 def decDoubleBed(k, count, decNeedle, c=None, side='l', gauge=1, emptyNeedles=[]):
@@ -4999,6 +5006,55 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				finishOff = False
 				print(f'\nNOTE: at row {r}, not finishing off carrier {carrier}, even though its section is finished, because some (or all) of the loops will be taken over by another carrier.')
 
+		"""
+		# ***************************** #move up here so happens before casting on new needles (if applicable)
+		if addBorder: dropBorderKnits = (r==lastWasteWeightRow)
+
+		if addBorder and sectionIdx == 0 and r in wKeys: #first section of the row
+			k.comment(f'insert border for row {r}') #remove #?
+
+			if r == lastWasteWeightRow:
+				nextIncRow = r+1 #just knit one more row if about to drop waste border
+			else:
+				nextIncRow = wKeys[wKeys.index(r)+1]
+
+				if (nextIncRow-r) > maxShortrowCount:
+					dropBorderKnits = True #if big gap btw inc
+					nextIncRow = r+maxShortrowCount
+
+			takenNeedles = [] # reset
+
+			finishedCs = [mapC for mapC in prevNeedles if mapC not in mapKeys]
+			overlap_cs = []
+
+			if len(finishedCs):
+				for mapC in finishedCs:
+					overlap_c = next((x for x in pieceMap[r] if prevNeedles[mapC][0] in pieceMap[r][x] or prevNeedles[mapC][-1] in pieceMap[r][x]), None)
+
+					if overlap_c is not None:
+						overlap_cs.append(overlap_c)
+						takenNeedles.append(range(convertGauge(gauge, leftN=pieceMap[r][overlap_c][0]), convertGauge(gauge, rightN=pieceMap[r][overlap_c][-1])+1))
+
+			for mapC in mapKeys:
+				if mapC not in overlap_cs:
+					if mapC in prevNeedles:
+						takenNeedles.append(range(prevNeedles[mapC][0], prevNeedles[mapC][-1]+1)) #base it off of prev needles, so can increase over the border loops for security or not yet knit in space that will open up if decreasing
+					else: takenNeedles.append([]) #empty list
+
+			if borderStartLeft:
+				wasteStartN = leftMostBorderN-borderWidthAdd
+				wasteEndN = rightMostBorderN+borderWidthAdd
+			else:
+				wasteStartN = rightMostBorderN+borderWidthAdd
+				wasteEndN = leftMostBorderN-borderWidthAdd		
+
+			borderToDrop = wasteBorder(k, startN=wasteStartN, endN=wasteEndN, rows=nextIncRow-r, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=dropBorderKnits, justTuck=False)
+
+			borderStartLeft = not borderStartLeft #new #*			
+
+		prevNeedles[carrier] = [n1, n2] #new #*
+		"""
+		"""
 		if r > 0 and carrier not in pieceMap[r-1]: #means this is a new section #might need to cast some needles on
 			print(f'new section at row {r}, using carrier {carrier}.')
 			lastLineC = k.returnLastOp(carrier=carrier, asDict=True)
@@ -5036,7 +5092,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				if n not in prevRowNeedles: newNeedles.append(n)
 			
 			if len(newNeedles):
-				k.comment('cast-on new needles')
+				k.comment('cast-on new needles') #beep
 
 				if openShaping: #TODO: make this based on img too!
 					openTubeCaston(k, startN=newNeedles[0], endN=newNeedles[-1], c=carrier, gauge=2) #TODO: make sure this doesn't cause issues if new needles attached to existing section
@@ -5066,9 +5122,12 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				for bn in tuckDrop:
 					k.drop(bn)
 				k.rollerAdvance(rollerAdvance)
+		"""
+		if r < len(pieceMap)-1: futureMapKeys = list(pieceMap[r+1].keys())
+		else: futureMapKeys = [] #new
 
 		if r < len(pieceMap)-1 and len(pieceMap[r+1]) > sectionCount and carrier in pieceMap[r+1]:
-			futureMapKeys = list(pieceMap[r+1].keys())
+			# futureMapKeys = list(pieceMap[r+1].keys())
 			if sectionIdx == 0 and futureMapKeys.index(carrier) != 0: #means new left shortrow section coming
 				futureNewSectionNeedles = pieceMap[r+1][futureMapKeys[0]]
 				futureNewSectionRightN = convertGauge(gauge, rightN=futureNewSectionNeedles[len(futureNewSectionNeedles)-1])
@@ -5139,7 +5198,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 		else:
 			switchDir[carrier] = not switchDir[carrier] #alternate
 
-			# if (openSide[carrier] == 'l' and xferR < 0 and (not len(openDecAreas) or (r in openDecAreas and n2 in openDecAreas[r]))) or (openSide[carrier] == 'r' and xferL < 0 and (not len(openDecAreas) or (r in openDecAreas and n1 in openDecAreas[r]))):
 			if (openSide[carrier] == 'l' and ((not len(openDecAreas) and xferR < 0) or (r in openDecAreas and n2 in openDecAreas[r]))) or (openSide[carrier] == 'r' and ((not len(openDecAreas) and xferL < 0) or (r in openDecAreas and n1 in openDecAreas[r]))):
 				if len(reusableCarriers):
 					bothOpenXtraC = {}
@@ -5208,6 +5266,26 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				rightCarriers.append(carrier)
 				doublePass1 = True
 
+		""" #beep """
+		# if sectionFinished and carrier in prevNeedles:
+		# 	if not finishOff: 
+		# 		takeOverSections = list(filter(lambda sect: (n1/gauge) in pieceMap[r+1][sect] or (n2/gauge) in pieceMap[r+1][sect], pieceMap[r+1]))
+
+				
+		# 		if len(takeOverSections):
+		# 			for sect in takeOverSections:
+		# 				if r == 16: print('takeOverSections:', sect, prevNeedles[sect]) #remove #debug #* #beep 
+		# 				if prevNeedles[sect][0] > prevNeedles[carrier][0]: prevNeedles[sect][0] = max(prevNeedles[carrier][0], convertGauge(gauge=gauge, leftN=pieceMap[r+1][sect][0]))
+
+		# 				if prevNeedles[sect][1] < prevNeedles[carrier][1]: prevNeedles[sect][1] = min(prevNeedles[carrier][1], convertGauge(gauge=gauge, rightN=pieceMap[r+1][sect][-1]))
+
+		# 		if r == 16: print('takeOverSections:', takeOverSections, prevNeedles) #remove #debug #* #beep
+		# 		# nextRowNeedles = [item for sublist in list(pieceMap[r+1].values()) for item in sublist]
+
+		# 		# if (n1/gauge) in nextRowNeedles or (n2/gauge) in nextRowNeedles:
+		# 	# del prevNeedles[carrier] #new #* #beep
+		# # else: prevNeedles[carrier] = [n1, n2]
+
 		if addBorder: dropBorderKnits = (r==lastWasteWeightRow)
 
 		if addBorder and sectionIdx == 0 and r in wKeys: #first section of the row
@@ -5215,31 +5293,48 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 			if r == lastWasteWeightRow:
 				nextIncRow = r+1 #just knit one more row if about to drop waste border
+
+				nextIncMapKeys = futureMapKeys #new #*
 			else:
 				nextIncRow = wKeys[wKeys.index(r)+1]
+
+				nextIncMapKeys = list(pieceMap[nextIncRow].keys())
 
 				if (nextIncRow-r) > maxShortrowCount:
 					dropBorderKnits = True #if big gap btw inc
 					nextIncRow = r+maxShortrowCount
+				
 
 			takenNeedles = [] # reset
 
 			finishedCs = [mapC for mapC in prevNeedles if mapC not in mapKeys]
+			
+			# if r == 15: print("futureMapKeys", nextIncMapKeys, nextIncRow)
+
+			# finishedCs = [mapC for mapC in prevNeedles if mapC not in nextIncMapKeys]
 			overlap_cs = []
 
 			if len(finishedCs):
 				for mapC in finishedCs:
-					overlap_c = next((x for x in pieceMap[r] if prevNeedles[mapC][0] in pieceMap[r][x] or prevNeedles[mapC][-1] in pieceMap[r][x]), None)
+					overlap_c = next((x for x in pieceMap[nextIncRow] if (prevNeedles[mapC][0]/gauge) in pieceMap[nextIncRow][x] or (prevNeedles[mapC][-1]/gauge) in pieceMap[nextIncRow][x]), None)
+					
+					# overlap_c = next((x for x in pieceMap[r] if prevNeedles[mapC][0] in pieceMap[r][x] or prevNeedles[mapC][-1] in pieceMap[r][x]), None)
 
 					if overlap_c is not None:
 						overlap_cs.append(overlap_c)
 						takenNeedles.append(range(convertGauge(gauge, leftN=pieceMap[r][overlap_c][0]), convertGauge(gauge, rightN=pieceMap[r][overlap_c][-1])+1))
+
+						# del prevNeedles[mapC] #new #* #beep
+				print(r, overlap_cs, wKeys, prevNeedles) #remove #debug #beep
 
 			for mapC in mapKeys:
 				if mapC not in overlap_cs:
 					if mapC in prevNeedles:
 						takenNeedles.append(range(prevNeedles[mapC][0], prevNeedles[mapC][-1]+1)) #base it off of prev needles, so can increase over the border loops for security or not yet knit in space that will open up if decreasing
 					else: takenNeedles.append([]) #empty list
+
+			if len(finishedCs):
+				for mapC in finishedCs: del prevNeedles[mapC]
 
 			if borderStartLeft:
 				wasteStartN = leftMostBorderN-borderWidthAdd
@@ -5248,11 +5343,105 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 				wasteStartN = rightMostBorderN+borderWidthAdd
 				wasteEndN = leftMostBorderN-borderWidthAdd		
 
+			if r == 60 or r == 17: print('takenNeedles:', takenNeedles, wasteStartN, wasteEndN) #remove #debug #beep
 			borderToDrop = wasteBorder(k, startN=wasteStartN, endN=wasteEndN, rows=nextIncRow-r, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=dropBorderKnits, justTuck=False)
 
-			borderStartLeft = not borderStartLeft #new #*			
+			borderStartLeft = not borderStartLeft			
 
-		prevNeedles[carrier] = [n1, n2] #new #*
+		# prevNeedles[carrier] = [n1, n2]
+
+		if not sectionFinished: prevNeedles[carrier] = [n1, n2] #new #* #beep
+		# elif carrier in prevNeedles: del prevNeedles[carrier] #new #* #beep
+
+		# if sectionFinished and carrier in prevNeedles:
+		# 	if not finishOff: 
+		# 		takeOverSections = list(filter(lambda sect: (n1/gauge) in pieceMap[r+1][sect] or (n2/gauge) in pieceMap[r+1][sect], pieceMap[r+1]))
+
+				
+		# 		if len(takeOverSections):
+		# 			for sect in takeOverSections:
+		# 				if r == 16: print('takeOverSections:', sect, prevNeedles[sect]) #remove #debug #* #beep 
+		# 				if prevNeedles[sect][0] > prevNeedles[carrier][0]: prevNeedles[sect][0] = max(prevNeedles[carrier][0], convertGauge(gauge=gauge, leftN=pieceMap[r+1][sect][0]))
+
+		# 				if prevNeedles[sect][1] < prevNeedles[carrier][1]: prevNeedles[sect][1] = min(prevNeedles[carrier][1], convertGauge(gauge=gauge, rightN=pieceMap[r+1][sect][-1]))
+
+		# 		if r == 16: print('takeOverSections:', takeOverSections, prevNeedles) #remove #debug #* #beep
+		# 		# nextRowNeedles = [item for sublist in list(pieceMap[r+1].values()) for item in sublist]
+
+		# 		# if (n1/gauge) in nextRowNeedles or (n2/gauge) in nextRowNeedles:
+		# 	del prevNeedles[carrier] #new #* #beep
+		# # else: prevNeedles[carrier] = [n1, n2]
+		""" """
+
+		""" """
+		if r > 0 and carrier not in pieceMap[r-1]: #means this is a new section #might need to cast some needles on
+			print(f'new section at row {r}, using carrier {carrier}.')
+			lastLineC = k.returnLastOp(carrier=carrier, asDict=True)
+
+			tuckDrop = []
+
+			if lastLineC is not None and lastLineC['bn1']['needle'] is not None: #see if we need to place the carrier or change direction
+				lastN = lastLineC['bn1']['needle']
+
+				dist_from_n1, dist_from_n2 = abs(lastN-n1), abs(lastN-n2)
+
+				min_dist = min(dist_from_n1, dist_from_n2)
+
+				if dist_from_n1 != dist_from_n2:
+					if (dir1 == '-' and min_dist == dist_from_n1) or (dir1 == '+' and min_dist == dist_from_n2):
+						print('changing dir1 for new carrier.')
+						dir1, dir2 = dir2, dir1
+				
+				if min_dist > 4:
+					tuckDrop = placeCarrier(k, leftN=(n1 if dir1 == '+' else None), rightN=(n2 if dir1 == '-' else None), carrierOpts=[carrier], gauge=gauge)[0]
+
+			if sectionIdx != 0 and sectionIdx != len(mapKeys)-1: #means that it is a new shortrow section that is not on the edge, so need to place carrier in correct spot
+				if dir1 == '+': k.miss('+', f'f{n1-1}', carrier)
+				else: k.miss('-', f'f{n2+1}', carrier)
+				k.pause(f'cut C{carrier}')
+
+
+			prevRowMapKeys = list(pieceMap[r-1].keys())
+			prevRowNeedles = range(convertGauge(gauge=gauge, leftN=pieceMap[r-1][prevRowMapKeys[0]][0]), convertGauge(gauge=gauge, rightN=pieceMap[r-1][prevRowMapKeys[len(prevRowMapKeys)-1]][len(pieceMap[r-1][prevRowMapKeys[len(prevRowMapKeys)-1]])-1]))
+
+			newNeedles = []
+			needleRange = range(n1, n2+1)
+			if dir1 == '-': needleRange = range(n2, n1-1, -1)
+			for n in needleRange:
+				if n not in prevRowNeedles: newNeedles.append(n)
+			
+			if len(newNeedles):
+				k.comment('cast-on new needles') #beep
+
+				if openShaping: #TODO: make this based on img too!
+					openTubeCaston(k, startN=newNeedles[0], endN=newNeedles[-1], c=carrier, gauge=2) #TODO: make sure this doesn't cause issues if new needles attached to existing section
+				else:
+					k.rack(0.25)
+					for n in range(0, len(newNeedles)):
+						if f'f{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'f{newNeedles[n]}', carrier)
+						if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir1, f'b{newNeedles[n]}', carrier)
+					k.rack(0)
+
+				dir2 = '-'
+				needleRange = range(n2, n1-1, -1)
+				if dir1 == '-':
+					dir2 = '+'
+					needleRange = range(n1, n2+1)
+
+				if not openShaping:
+					k.comment('back pass to get carrier on correct side')
+					for n in range(len(newNeedles)-1, -1, -1): #back pass to get carrier on correct side
+						if f'b{newNeedles[n]}' not in emptyNeedles: k.knit(dir2, f'b{newNeedles[n]}', carrier)
+			else:
+				prevLeftN = prevRowNeedles[0]
+				if prevLeftN < n1: xferL = prevLeftN - n1
+			
+			if len(tuckDrop):
+				k.rollerAdvance(0)
+				for bn in tuckDrop:
+					k.drop(bn)
+				k.rollerAdvance(rollerAdvance)
+		""" """
 
 		if len(takenNeedles):
 			if sectionIdx < len(takenNeedles): takenNeedles[sectionIdx] = range(n1, n2+1) #new #alter so based on inc/dec if adding border for tuck-over-split
@@ -6051,6 +6240,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					passLeftN = patRightN+1
 				
 				if passRightN >= passLeftN:
+					#TODO: maybe remove this? since 
 					if not fairisleKnitPos(passLeftN, passRightN): plainKnitPos(passLeftN, passRightN) #new
 			else:
 				if not fairisleKnitPos(leftMostN, rightMostN): plainKnitPos(leftMostN, rightMostN) #new
@@ -6061,10 +6251,12 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 					k.knit('+', bn, bedCarriers[posBed])
 
 			if dir1 == '+' and (xferR < -2): #so no ladder (carrier is in correct spot to dec or inc with yarn) #TODO: have this be the correct stitch pattern if applicable
-				for n in range(n2+1, prevRightN+1):
-					if f'{posBed}{n}' not in emptyNeedles:
-						k.knit('+', f'{posBed}{n}', bedCarriers[posBed])
-					elif n == prevRightN: k.miss('+', f'{posBed}{n}', bedCarriers[posBed]) #get carrier out of way
+				#go back! #? #v
+				# for n in range(n2+1, prevRightN+1):
+				# 	if f'{posBed}{n}' not in emptyNeedles:
+				# 		k.knit('+', f'{posBed}{n}', bedCarriers[posBed])
+				# 	elif n == prevRightN: k.miss('+', f'{posBed}{n}', bedCarriers[posBed]) #get carrier out of way
+				#^
 
 				if bothOpenXtraC is not None and openShaping and gauge == 2: k.miss('+', f'{posBed}{prevRightN+1}', bedCarriers[posBed]) #using different carrier for bindoff that's coming up and will tuck prevRightN+1, so miss past that too
 
