@@ -1464,7 +1464,7 @@ def halfGaugeFairisle(k, r, edgeNeedles, needles, direction, bed, c, tuckedNs): 
 
 
 def wasteBorder(k, startN, endN, rows, c, gauge, offLimits, lastTime, justTuck=False, missN=None):
-	# offLimits = [nRange for nRange in offLimits if nRange != []] # remove empty lists
+	offLimits_flat = [item for sublist in offLimits for item in sublist]
 
 	k.rollerAdvance(0)
 
@@ -1499,12 +1499,13 @@ def wasteBorder(k, startN, endN, rows, c, gauge, offLimits, lastTime, justTuck=F
 				if (((firstTuckN-1)//gauge) % 2) == 0: interlockStartCondition = 2 #the way the interlock func code is written, (((leftN-1)//gauge) % 2) == 0 [which corresponds with backBed1 func] should happen second time around, so start with backBed2 func
 				else: interlockStartCondition = 1
 
-			interlock(k, interlockStartN, interlockEndN, interlockRows, c, gauge, startCondition=interlockStartCondition)
+			if interlockStartN not in offLimits_flat and interlockEndN not in offLimits_flat: #new
+				interlock(k, interlockStartN, interlockEndN, interlockRows, c, gauge, startCondition=interlockStartCondition)
 
-			if lastTime:
-				for n in range(interlockStartN, interlockEndN+1):
-					if n % gauge == 0: toDrop.append(f'f{n}')
-					if (n+1) % gauge == 0: toDrop.append(f'b{n}')
+				if lastTime:
+					for n in range(interlockStartN, interlockEndN+1):
+						if n % gauge == 0: toDrop.append(f'f{n}')
+						if (n+1) % gauge == 0: toDrop.append(f'b{n}')
 
 			if i < len(offLimits):
 				tuckEndN = offLimits[i][-1]
@@ -1551,13 +1552,14 @@ def wasteBorder(k, startN, endN, rows, c, gauge, offLimits, lastTime, justTuck=F
 			else:
 				if (((firstTuckN-1)//gauge) % 2) == 0: interlockStartCondition = 2 #the way the interlock func code is written, (((rightN-1)//gauge) % 2) == 0 [which corresponds with backBed1 func] should happen second time around, so start with backBed2 func
 				else: interlockStartCondition = 1
+			
+			if interlockStartN not in offLimits_flat and interlockEndN not in offLimits_flat: #new
+				interlock(k, interlockStartN, interlockEndN, interlockRows, c, gauge, startCondition=interlockStartCondition)
 
-			interlock(k, interlockStartN, interlockEndN, interlockRows, c, gauge, startCondition=interlockStartCondition)
-
-			if lastTime:
-				for n in range(interlockEndN, interlockStartN+1):
-					if n % gauge == 0: toDrop.append(f'f{n}')
-					if (n+1) % gauge == 0: toDrop.append(f'b{n}')
+				if lastTime:
+					for n in range(interlockEndN, interlockStartN+1):
+						if n % gauge == 0: toDrop.append(f'f{n}')
+						if (n+1) % gauge == 0: toDrop.append(f'b{n}')
 
 			if tuckEndN < endN: break #new #*
 
@@ -2323,15 +2325,19 @@ def halfGaugeRib1x1Bindoff(k, count, xferNeedle, c, side='l'):
 #--- FINISH BY DROP FUNCTION ---
 def dropFinish(k, frontNeedleRanges=[], backNeedleRanges=[], carriers=[], rollOut=True, emptyNeedles=[], direction='+', borderC=None, borderStPat=None):
 	'''
-	*k is knitout Writer
-	*frontNeedleRanges is a list of [leftN, rightN] pairs for needles to drop on the front bed; if multiple sections, can have sub-lists as so: [[leftN1, rightN1], [leftN2, rightN2], ...], or just [leftN, rightN] if only one section
-	*backNeedleRanges is same as above, but for back bed
-	*carriers is list of carriers to take out (optional, only if you want to take them out using this function)
-	*rollOut is an optional boolean parameter indicating whether extra roller advance should be added to roll the piece out
-	*emptyNeedles is an optional list of needles that are not currently holding loops (e.g. if using stitch pattern), so don't waste time dropping them
-	*direction is an optional parameter to indicate which direction the first pass should have (valid values are '+' or '-'). (NOTE: this is an important value to pass if borderC is included, so know which direction to knit first with borderC). #TODO: maybe just add a knitout function to find line that last used the borderC carrier
-	*borderC is an optional carrier that will knit some rows of waste yarn before dropping, so that there is a border edge on the top to prevent the main piece from unravelling (NOTE: if borderC is None, will not add any border)
-	*borderStPat is *TODO
+	Finishes knitting by dropping loops (optionally knitting 16 rows of waste yarn prior with `borderC`, and optionally taking carriers listed in `carriers` param out afterwards).
+
+	Parameters:
+	----------
+	* k (import): the knitout Writer.
+	* frontNeedleRanges (list, optional): a list of [leftN, rightN] pairs for needles to drop on the front bed; if multiple sections, can have sub-lists as so: [[leftN1, rightN1], [leftN2, rightN2], ...], or just [leftN, rightN] if only one section. Defaults to [].
+	* backNeedleRanges (list, optional): same as above, but for back bed. Defaults to [].
+	* carriers (list, optional): list of carriers to take out (optional, only if you want to take them out using this function). Defaults to [].
+	* rollOut (bool, optional): an optional boolean parameter indicating whether extra roller advance should be added to roll the piece out. Defaults to True.
+	* emptyNeedles (list, optional): an optional list of needles that are not currently holding loops (e.g. if using stitch pattern), so don't waste time dropping them. Defaults to [].
+	* direction (str, optional): an optional parameter to indicate which direction the first pass should have (valid values are '+' or '-'). (NOTE: this is an important value to pass if borderC is included, so know which direction to knit first with borderC). Defaults to '+'. #TODO: maybe just add a knitout function to find line that last used the borderC carrier
+	* borderC (str, optional): an optional carrier that will knit some rows of waste yarn before dropping, so that there is a border edge on the top to prevent the main piece from unravelling (NOTE: if borderC is None, will not add any border). Defaults to None.
+	* borderStPat ([type], optional): [description]. Defaults to None. *TODO
 	'''
 
 	k.comment('drop finish')
@@ -5318,7 +5324,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 							borderStartLeft = not borderStartLeft
 						else:
-							tuckBorderToDrop = wasteBorder(k, startN=leftMostBorderN-borderWidthAdd, endN=newLeftN, rows=0, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=False, justTuck=True, missN=newLeftN) #TODO: deal with lastTime #TODO
+							tuckBorderToDrop = wasteBorder(k, startN=leftMostBorderN-borderWidthAdd, endN=newLeftN, rows=0, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=False, justTuck=True, missN=newLeftN) #TODO: deal with lastTime #new: newLeftN+1 #? #beep
 							toDrop.extend(tuckBorderToDrop)
 
 							# interlock(k, startN=leftMostBorderN-borderWidthAdd, endN=newLeftN-1, length=0.5, c=borderC, gauge=gauge, emptyNeedles=takenNeedles)
@@ -5411,7 +5417,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 							toDrop.extend(tuckBorderToDrop)
 							borderStartLeft = not borderStartLeft
 						else:
-							tuckBorderToDrop = wasteBorder(k, startN=rightMostBorderN+borderWidthAdd, endN=newRightN, rows=0, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=False, justTuck=True, missN=newRightN+1)
+							tuckBorderToDrop = wasteBorder(k, startN=rightMostBorderN+borderWidthAdd, endN=newRightN+1, rows=0, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=False, justTuck=True, missN=newRightN+1) #new: newRightN+1 #beep
 
 							toDrop.extend(tuckBorderToDrop)
 
@@ -5421,6 +5427,7 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 						tuckOverDrop = k.tuckOverSplit(borderC, '-')
 						toDrop.extend(tuckOverDrop)
 
+						if r == 7: print('!!', newRightN+1, rightMostBorderN+borderWidthAdd, takenNeedles) #remove #debug #Beep
 						tuckBorderToDrop = wasteBorder(k, startN=newRightN+1, endN=rightMostBorderN+borderWidthAdd, rows=0, c=borderC, gauge=gauge, offLimits=takenNeedles, lastTime=False, justTuck=True, missN=rightMostBorderN+borderWidthAdd+1)
 
 						toDrop.extend(tuckBorderToDrop)
