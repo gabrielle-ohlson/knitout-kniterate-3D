@@ -514,7 +514,7 @@ def interlock(k, startN, endN, length, c, gauge=1, startCondition=1, emptyNeedle
 		if h % 2 == 0:
 			for n in range(leftN, rightN+1):
 				if startCondition == 1: #first pass of interlock will knit on 0, 1, 4, 5, etc.
-					if homeBed is None:
+					if homeBed is None or gauge == 1:
 						if frontBed1(n, '+'): continue
 						elif backBed1(n, '+'): continue
 						elif n == rightN: k.miss('+', f'f{n}', c)
@@ -523,7 +523,7 @@ def interlock(k, startN, endN, length, c, gauge=1, startCondition=1, emptyNeedle
 						elif travelBed1(n, '+'): continue
 						elif n == rightN: k.miss('+', f'f{n}', c)
 				else: #first pass of interlock will knit on 2, 3, 6, 7, etc.
-					if homeBed is None:
+					if homeBed is None or gauge == 1:
 						if frontBed2(n, '+'): continue
 						elif backBed2(n, '+'): continue
 						elif n == rightN: k.miss('+', f'f{n}', c)
@@ -534,7 +534,7 @@ def interlock(k, startN, endN, length, c, gauge=1, startCondition=1, emptyNeedle
 		else:
 			for n in range(rightN, leftN-1, -1):
 				if startCondition == 2:
-					if homeBed is None:
+					if homeBed is None or gauge == 1:
 						if frontBed1(n, '-'): continue
 						elif backBed1(n, '-'): continue
 						elif n == leftN: k.miss('-', f'f{n}', c)
@@ -543,7 +543,7 @@ def interlock(k, startN, endN, length, c, gauge=1, startCondition=1, emptyNeedle
 						elif travelBed1(n, '-'): continue
 						elif n == leftN: k.miss('-', f'f{n}', c)
 				else:
-					if homeBed is None:
+					if homeBed is None or gauge == 1:
 						if frontBed2(n, '-'): continue
 						elif backBed2(n, '-'): continue
 						elif n == leftN: k.miss('-', f'f{n}', c)
@@ -552,12 +552,16 @@ def interlock(k, startN, endN, length, c, gauge=1, startCondition=1, emptyNeedle
 						elif travelBed2(n, '-'): continue
 						elif n == leftN: k.miss('-', f'f{n}', c)
 	
-	if homeBed is not None:
+	if homeBed is not None and (gauge != 1 or startCondition != 1):
 		xferSettings(k)
 		for n in range(leftN, rightN+1):
-			if (n == startN and secureStartN) or (n == endN and secureEndN): continue
+			if gauge == 1:
+				if n % 2 == 0: k.xfer(f'b{n}', f'f{n}')
+				else: k.xfer(f'f{n}', f'b{n}')
+			else:
+				if (n == startN and secureStartN) or (n == endN and secureEndN): continue
 
-			if currCondition(n) and f'{homeBed}{n}' not in emptyNeedles and (((n//gauge) % (2*gauge)) % gauge) != 0: k.xfer(f'{travelBed}{n}', f'{homeBed}{n}') #check (especially check if works for gauge 1)
+				if currCondition(n) and f'{homeBed}{n}' not in emptyNeedles and (((n//gauge) % (2*gauge)) % gauge) != 0: k.xfer(f'{travelBed}{n}', f'{homeBed}{n}')
 		resetSettings(k)
 
 
@@ -1781,7 +1785,7 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 			interlock(k, rightN, leftN, interlockLength-24, wasteC, gauge)
 		else: interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
 		if drawMiddle:
-			if drawC is not None: drawThread(k, leftN, rightN, drawC, side=drawSide, circular=True, missDraw=missDraw, gauge=gauge) #new
+			if drawC is not None: drawThread(k, leftN, rightN, drawC, side=drawSide, circular=True, missDraw=missDraw, gauge=gauge)
 
 			if initial and interlockLength > 12:
 				if interlockLength < 24:
@@ -1794,7 +1798,7 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 				interlock(k, rightN, leftN, interlockLength, wasteC, gauge)
 				if initial: k.pause('cut yarns')
 		else:
-			if initial: k.pause('cut yarns')
+			if initial and interlockLength <= 24: k.pause('cut yarns')
 			circular(k, rightN, leftN, 8, wasteC, gauge)
 		if missWaste is not None: k.miss('+', f'f{missWaste}', wasteC)
 	else:
@@ -1817,7 +1821,7 @@ def wasteSection(k, leftN, rightN, closedCaston=True, wasteC='1', drawC='2', oth
 				interlock(k, leftN, rightN, interlockLength, wasteC, gauge)
 				if initial: k.pause('cut yarns')
 		else:
-			if initial: k.pause('cut yarns')
+			if initial  and interlockLength <= 24: k.pause('cut yarns')
 			circular(k, leftN, rightN, 8, wasteC, gauge)
 		if missWaste is not None: k.miss('-', f'f{missWaste}', wasteC)
 
@@ -3669,6 +3673,9 @@ def getStitchData(k, bed, shapeData, imagePath='graphics/stitch-pat-map.png', st
 				if col in colorArgs:
 					patArgs = colorArgs[col]
 					for arg in patArgs:
+						if arg == 'gauge' and patArgs[arg] == 1:
+							if 'startCondition' in args: args['startCondition'] = 1 if bed == 'f' else 2 #to ensure that the interlock properly alternates if on front and back
+
 						if arg in args: args[arg] = patArgs[arg]
 						elif arg == 'length' or arg == 'passes': info['passes'] = patArgs[arg] #TODO: refine this
 						elif arg == 'features':
@@ -3682,7 +3689,7 @@ def getStitchData(k, bed, shapeData, imagePath='graphics/stitch-pat-map.png', st
 							if 'rollerAdvance' in patArgs[arg]: info['rollerAdvance'] = patArgs[arg]['rollerAdvance']
 							if 'speedNumber' in patArgs[arg]: info['speedNumber'] = patArgs[arg]['speedNumber']
 
-				pat = StitchPatDetails(pattern, args, info, col) #new col
+				pat = StitchPatDetails(pattern, args, info, col)
 
 				if pat.pattern == 'garter': pat.update = garterUpdate.__get__(pat)
 				elif pat.pattern == 'rib': pat.update = ribUpdate.__get__(pat)
