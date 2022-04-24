@@ -5359,7 +5359,6 @@ def shapeImgToKnitout(k, imagePath='graphics/knitMap.png', gauge=2, scale=1, max
 
 				if (nextIncRow-r) > maxShortrowCount:
 					big_inc_gap = True
-					# dropBorderKnits = True #if big gap btw inc
 					nextIncRow = r+maxShortrowCount
 				else: big_inc_gap = False
 

@@ -1,0 +1,2 @@
+include versioneer.py
+include knitout_kniterate_3D/_version.py
