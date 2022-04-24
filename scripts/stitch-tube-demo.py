@@ -19,7 +19,7 @@ side = 'l'
 
 # --- STITCH PATTERN TUBE FUNCTIONS ---
 
-knit3D.setSettings(k=k, stitch=5, xferStitch=3, wasteStitch=5)
+knit3D.setSettings(k=k, stitchNumber=5, xferStitchNumber=3, wasteStitchNumber=5)
 
 # --- debug ---
 # knit3D.stitchPatternTube(k, leftN=leftN, rightN=rightN, c=mainC, wasteC=wasteC, drawC=drawC, featureCs=[wasteC, drawC], side='l', patterns=[

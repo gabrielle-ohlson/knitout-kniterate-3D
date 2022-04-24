@@ -26,7 +26,7 @@ colorArgsB = {'red': {'patternRows': 4, 'passes': 2},'blue': {'patternRows': 4, 
     'green': {'patternRows': 4, 'passes': 2},'yellow': {'patternRows': 4, 'passes': 2}}
 
 stitchsize = 5
-knit3D.setSettings(roller=500,stitch = stitchsize)
+knit3D.setSettings(rollerAdvance=500, stitchNumber=stitchsize)
 
 
 knit3D.shapeImgToKnitout(k, imagePath=imagePath, gauge=2, maxShortrowCount=4,
